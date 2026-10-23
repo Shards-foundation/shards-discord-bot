@@ -74,7 +74,7 @@ test('/system status reports truthful runtime and gateway state', async () => {
   await handleInteraction(i);
   assert.match(i.replies[0].content, /Discord connection: not ready/);
   assert.match(i.replies[0].content, /Gateway latency: unavailable/);
-  assert.match(i.replies[0].content, /Task executor: not configured/);
+  assert.match(i.replies[0].content, /Task executor: local Qwen worker/);
   assert.match(i.replies[0].content, /Runtime: Node\.js/);
 });
 test('hello greets the invoking username without triggering mentions', async () => {
@@ -89,7 +89,7 @@ test('help lists community commands and truthfully labels task execution', async
   assert.match(i.replies[0].content, /\/system status/);
   assert.match(i.replies[0].content, /\/choose/);
   assert.match(i.replies[0].content, /\/github repo/);
-  assert.match(i.replies[0].content, /no executor configured/);
+  assert.match(i.replies[0].content, /local Qwen task execution/);
 });
 test('roll uses requested sides and defaults to a six-sided die', async () => {
   const requested = interaction({ commandName: 'roll', options: { getInteger: () => 20 } });
