@@ -51,7 +51,8 @@ export async function handleMentionMessage(message, client, ollamaClient, logger
   if (!message.guildId || message.author?.bot || !client.user || !message.mentions?.has(client.user)) return;
   if (message.channel?.isThread?.() && message.channel.archived) return;
   const permissions = message.channel?.permissionsFor?.(client.user);
-  if (permissions && !permissions.has(['ViewChannel', 'ReadMessageHistory', 'SendMessages', ...(message.channel.isThread?.() ? ['SendMessagesInThreads'] : [])])) return;
+  const requiredPermissions = ['ViewChannel', 'ReadMessageHistory', ...(message.channel.isThread?.() ? ['SendMessagesInThreads'] : ['SendMessages'])];
+  if (!permissions || !permissions.has(requiredPermissions)) return;
   const promptText = String(message.content || '').replace(new RegExp('<@!?'+client.user.id+'>', 'g'), '').trim();
   if (!promptText) {
     await message.reply({ content: 'Mention me with a question or instruction and I will respond using recent conversation context.', allowedMentions: { parse: [] } });
