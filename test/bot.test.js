@@ -42,9 +42,9 @@ test('preview config needs no token but rejects invalid IDs', () => {
   assert.equal(readConfig({}, { requireToken: false }).applicationId, '1562965805413568532');
   assert.throws(() => readConfig({ DISCORD_APPLICATION_ID: '0' }, { requireToken: false }), /DISCORD_APPLICATION_ID/);
 });
-test('registration payload exposes exactly the two supported chat commands', () => {
+test('registration payload exposes the full supported command set', () => {
   assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
+    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'ai', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
   ]);
   for (const command of commands) assert.ok(command.description.length > 0);
   assert.equal(commands.find(c => c.name === 'roll').options[0].min_value, 2);
