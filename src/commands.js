@@ -140,7 +140,7 @@ async function handleAICommand(interaction, ollamaClient) {
   } else {
     const models = await ollamaClient.listModels();
     const installed = models.some(item => item.name === ollamaClient.model
-      || item.name.split(':')[0] === ollamaClient.model.split(':')[0]);
+      || (!ollamaClient.model.includes(':') && item.name.split(':')[0] === ollamaClient.model));
     if (subcommand === 'status') {
       content = [
         'Ollama API: reachable',
@@ -306,7 +306,8 @@ export async function handleInteraction(interaction, logger = console, taskStore
       allowedMentions: { parse: [] },
     };
     try {
-      if (interaction.deferred || interaction.replied) await interaction.followUp(fallback);
+      if (interaction.deferred && typeof interaction.editReply === 'function') await interaction.editReply(fallback);
+      else if (interaction.replied) await interaction.followUp(fallback);
       else await interaction.reply(fallback);
     } catch {
       logger.error('Unable to send the private error response.');
