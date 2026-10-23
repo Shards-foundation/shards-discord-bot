@@ -1,0 +1,30 @@
+name: Container validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build runtime image and validate Compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose configuration
+        env:
+          DISCORD_BOT_TOKEN: validation-placeholder-not-a-real-token
+        run: docker compose config --quiet
+
+      - name: Build bot image
+        run: docker build --tag shards-discord-bot:ci .
