@@ -8,7 +8,7 @@ test('live Ollama smoke check requires the configured model and successful infer
     async listModels() { return [{ name: 'qwen3.5:4b' }]; },
     async chat(prompt) { assert.match(prompt, /SHARDS_OLLAMA_OK/); return { content: 'SHARDS_OLLAMA_OK' }; },
   });
-  assert.deepEqual(result, { model: 'qwen3.5:4b', installed: true, inference: true, responseCharacters: 15 });
+  assert.deepEqual(result, { model: 'qwen3.5:4b', installed: true, inference: true, responseCharacters: 16 });
 });
 
 test('live Ollama smoke check fails clearly when the configured model is absent', async () => {
