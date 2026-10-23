@@ -24,7 +24,7 @@ jobs:
       - name: Validate Compose configuration
         env:
           DISCORD_BOT_TOKEN: validation-placeholder-not-a-real-token
-        run: docker compose config --quiet
+        run: touch .env && docker compose config --quiet
 
       - name: Build bot image
         run: docker build --tag shards-discord-bot:ci .
