@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { createOllamaClient } from './ollama.js';
 import { ApplicationCommandOptionType, ApplicationCommandType, MessageFlags } from 'discord.js';
 
 export const commands = [
@@ -26,6 +27,36 @@ export const commands = [
         max_length: 140,
       }],
     }],
+  },
+  {
+    name: 'ai',
+    description: 'Ask the local Qwen model through Ollama.',
+    type: ApplicationCommandType.ChatInput,
+    options: [
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: 'ask',
+        description: 'Send a prompt to the configured Qwen model.',
+        options: [{
+          type: ApplicationCommandOptionType.String,
+          name: 'prompt',
+          description: 'What should Shards AI help with?',
+          required: true,
+          min_length: 1,
+          max_length: 3000,
+        }],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: 'status',
+        description: 'Check Ollama connectivity and whether the configured model is installed.',
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: 'models',
+        description: 'List locally available Ollama models.',
+      },
+    ],
   },
   {
     name: 'system',
@@ -96,6 +127,37 @@ function formatStatus(client) {
   ].join('\n');
 }
 
+async function handleAICommand(interaction, ollamaClient) {
+  const subcommand = interaction.options.getSubcommand();
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  let content;
+  if (subcommand === 'ask') {
+    const prompt = interaction.options.getString('prompt', true);
+    const answer = await ollamaClient.chat(prompt);
+    const responseText = answer.content.length > 1_750 ? answer.content.slice(0, 1_730) + '\n\n[Response truncated for Discord.]' : answer.content;
+    const seconds = answer.totalDurationNs === null ? 'unknown' : (answer.totalDurationNs / 1e9).toFixed(1) + 's';
+    content = '**Shards AI · ' + answer.model + ' · ' + seconds + '**\n' + responseText;
+  } else {
+    const models = await ollamaClient.listModels();
+    const installed = models.some(item => item.name === ollamaClient.model
+      || item.name.split(':')[0] === ollamaClient.model.split(':')[0]);
+    if (subcommand === 'status') {
+      content = [
+        'Ollama API: reachable',
+        'Configured model: ' + ollamaClient.model,
+        'Model installed: ' + (installed ? 'yes' : 'no'),
+        'Available models: ' + models.length,
+        ...(installed ? [] : ['Install it with: ollama pull ' + ollamaClient.model]),
+      ].join('\n');
+    } else {
+      content = models.length
+        ? '**Ollama models (' + models.length + ')**\n' + models.map(item => '• ' + item.name + (item.size ? ' · ' + (item.size / 1e9).toFixed(1) + ' GB' : '')).join('\n')
+        : 'Ollama is reachable, but no models are installed. Install the configured model first.';
+    }
+  }
+  await interaction.editReply({ content: content.slice(0, 1_950), allowedMentions: { parse: [] } });
+}
+
 async function handleTaskCommand(interaction, taskStore) {
   if (!interaction.guildId) {
     await interaction.reply({ content: 'Task requests are available only inside a server.', flags: MessageFlags.Ephemeral });
@@ -139,6 +201,8 @@ const HELP_TEXT = [
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
   '`/github repo owner/name` — public GitHub repository metadata',
+  '`/ai ask prompt` — send a prompt to the configured Qwen model through Ollama',
+  '`/ai status` and `/ai models` — check Ollama and installed models',
   '`/help` — this command list',
 ].join('\n');
 
@@ -190,9 +254,9 @@ function chooseOption(raw) {
   return { value: options[randomInt(options.length)] };
 }
 
-export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch) {
+export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient()) {
   if (!interaction.isChatInputCommand()) return;
-  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'system', 'task'].includes(interaction.commandName);
+  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task'].includes(interaction.commandName);
   if (!supported) return;
   try {
     let content;
