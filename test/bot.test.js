@@ -132,7 +132,7 @@ test('GitHub lookup reports bounded public repository metadata', async () => {
   });
   assert.equal(requestedUrl, 'https://api.github.com/repos/octocat/Hello-World');
   assert.equal(result.ok, true);
-  assert.match(result.content, /octocat\\/Hello-World/);
+  assert.match(result.content, /octocat\/Hello-World/);
   assert.match(result.content, /1,234/);
   assert.match(result.content, /Primary language: JavaScript/);
 });
@@ -153,7 +153,7 @@ test('GitHub command responds privately and suppresses mentions', async () => {
   }));
   assert.equal(i.deferred, true);
   assert.equal(i.replies[0].allowedMentions.parse.length, 0);
-  assert.match(i.replies[0].content, /octocat\\/Hello-World/);
+  assert.match(i.replies[0].content, /octocat\/Hello-World/);
 });
 test('non-chat interactions and unknown commands are ignored', async () => {
   for (const i of [interaction({ isChatInputCommand: () => false }), interaction({ commandName: 'missing' })]) {
