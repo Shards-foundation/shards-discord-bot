@@ -89,11 +89,11 @@ export const commands = [
       {
         type: ApplicationCommandOptionType.Subcommand,
         name: 'submit',
-        description: 'Store a task request in the durable queue.',
+        description: 'Queue a task for the local Qwen worker to process.',
         options: [{
           type: ApplicationCommandOptionType.String,
           name: 'request',
-          description: 'Task request (stored for the configured worker).',
+          description: 'Task request processed by the local Qwen worker.',
           required: true,
           min_length: 1,
           max_length: 2_000,
@@ -134,7 +134,7 @@ function formatStatus(client) {
   return [
     `Discord connection: ${ready ? 'ready' : 'not ready'}`,
     `Gateway latency: ${latency}`,
-    'Task executor: not configured (submitted requests remain queued)',
+    'Task executor: local Qwen worker (when Ollama is available)',
     `Process uptime: ${uptime}`,
     `Runtime: Node.js ${process.versions.node}`,
   ].join('\n');
@@ -186,7 +186,7 @@ async function handleTaskCommand(interaction, taskStore) {
       request: interaction.options.getString('request', true),
       idempotencyKey: interaction.id,
     });
-    content = `Task ${task.id} was saved to the durable queue (status: ${task.state}). No task executor is configured, so the request has not been processed.`;
+    content = `Task ${task.id} was saved to the durable queue (status: ${task.state}). The local Qwen worker will process it when Ollama is available. Check /task status for the result.`;
   } else {
     const taskId = interaction.options.getString('task_id', true);
     if (subcommand === 'status') {
@@ -209,7 +209,7 @@ const HELP_TEXT = [
   '`/ping` — gateway latency check',
   '`/hello` — greeting',
   '`/system status` — runtime and connection status',
-  '`/task submit`, `/task status`, `/task cancel` — durable task intake and tracking (no executor configured)',
+  '`/task submit`, `/task status`, `/task cancel` — durable queue with local Qwen task execution',
   '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',

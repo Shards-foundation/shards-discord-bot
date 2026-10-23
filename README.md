@@ -1,6 +1,6 @@
 # Shards Discord Bot
 
-A private, safety-first Discord application foundation for **Shards inc**. The bot provides basic utility commands, truthful runtime status, a durable task-intake lifecycle, offline tests, and deliberately guarded slash-command registration.
+A private, safety-first Discord application foundation for **Shards inc**. The bot provides utility commands, local Ollama/Qwen inference, read-only public GitHub research, a durable task queue with a background Qwen worker, offline tests, and deliberately guarded slash-command registration.
 
 > **Status:** foundation / development. No production deployment is configured. Startup does not register commands, and no live Discord changes are part of routine development.
 
@@ -12,7 +12,7 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | Gateway intents | `Guilds` only; no privileged intents |
 | Commands | `/ai ask`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task submit`, `/task status`, `/task cancel`, community utilities |
 | AI inference | Real Ollama `/api/chat` integration using configured Qwen model; no cloud AI key required |
-| Task execution | Durable intake ledger; agentic tool execution is not yet enabled |
+| Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
 | Tests | Node's built-in test runner; no Discord credentials required |
 | Secrets | Local `.env` only; never committed or logged |
@@ -56,7 +56,7 @@ These checks are designed to run without credentials or Discord network access. 
 
 - `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
 - `/hello` — greets the invoking username as plain text. Mention parsing is disabled, so user-controlled text cannot trigger mass mentions.
-- `/help` — lists supported commands and clearly states that queued tasks are not executed yet.
+- `/help` — lists supported commands, including the local Qwen task worker.
 - `/roll [sides]` — rolls a die from 2 to 1000 sides, defaulting to six.
 - `/choose options` — randomly chooses from 2–20 comma-separated options; the input is bounded and empty entries are ignored.
 - `/coinflip` — returns heads or tails.
@@ -66,10 +66,10 @@ These checks are designed to run without credentials or Discord network access. 
 - `/ai status` — checks API reachability and whether the configured model is installed.
 - `/ai models` — lists the models available to the configured Ollama server.
 - `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
-- `/task submit` — stores a bounded request in the durable queue and returns its ID. It does **not** execute the request: no worker or AI provider is configured.
+- `/task submit` — stores a bounded request in the durable queue; the background worker sends it to the configured local Qwen model when Ollama is available.
 - `/task status` and `/task cancel` — privately inspect or cancel the request you submitted. Only queued tasks can be cancelled.
 
-Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. Worker integrations must be idempotent because a crash can cause a task to be retried. Use a shared transactional database before running multiple bot instances. There is no executor yet, so submitted work stays queued until one is added.
+Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. The text-only worker stores generated results or a non-sensitive failure code. A crash can cause a task to be retried; use a shared transactional database and cross-process leases before running multiple bot instances.
 
 Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing. ### Ollama + Qwen
 
@@ -77,7 +77,7 @@ The bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded
 
 For a host-installed Ollama server, set `OLLAMA_BASE_URL=http://127.0.0.1:11434`. When the bot runs inside Docker Compose, set it to `http://ollama:11434` (the Compose configuration already does this). Discord and Ollama must both be reachable from the bot's runtime. A model cannot run inside Discord itself; inference occurs on the machine/container hosting Ollama.
 
-The current `/ai` integration is text chat only. It does not yet grant Qwen tool access, run shell commands, modify repositories, browse the web, or execute queued tasks. Those capabilities require separate, permissioned tool adapters and a governed execution worker.
+The `/ai ask` command is text chat; `/ai research` adds a bounded, read-only public GitHub tool loop. The queued-task worker only generates text and has no shell, filesystem, network, or write-capable tools. Any future side-effecting tools require separate permissioned adapters, approval rules, and independent verification.
 
 The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
 
@@ -124,3 +124,10 @@ This repository is a foundation, not a claim of feature completeness. Sensible n
 ## Contributing and security
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. The [Terms of Service](TERMS_OF_SERVICE.md) and [Privacy Policy](PRIVACY_POLICY.md) are **drafts only**: complete their legal-entity, contact, jurisdiction, effective-date, deployment, and retention details and obtain legal review before publishing or relying on them. The project is licensed under MIT. The GitHub repository must be made public by an authorised maintainer before it is publicly discoverable as an open-source repository.
+
+
+## Task worker execution boundary
+
+The background worker claims queued tasks from the durable ledger, submits the request to the configured Ollama model, and stores the result for the requester to retrieve with `/task status`. Task transitions and worker outcomes are recorded in the task event ledger. The worker is deliberately **text-only**: it has no shell, filesystem, network, GitHub write, or Discord message-send tools. It must not claim to have performed external actions. Requests that require real-world changes receive guidance or a blocker instead of an unverified success claim.
+
+The current JSON ledger is designed for one bot process and one persistent data volume. Do not scale to multiple replicas or shared workers until the ledger is replaced with a transactional shared database and cross-process leases. Ollama failures mark a task failed with a non-sensitive failure code; inspect the bot logs and retry by submitting a new request after restoring the model service.

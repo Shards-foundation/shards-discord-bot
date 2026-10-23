@@ -3,9 +3,10 @@ export function createShutdownHandler(client, { logger = console, onComplete = (
   return signal => {
     if (shutdownPromise) return shutdownPromise;
     shutdownPromise = (async () => {
-      logger.info(`Received ${signal}; shutting down Discord client.`);
+      logger.info(`Received ${signal}; stopping task worker and Discord client.`);
       try {
-        await client.destroy();
+        await client.taskWorker?.stop();
+      await client.destroy();
         onComplete(0);
       } catch {
         logger.error('Discord client shutdown failed.');
