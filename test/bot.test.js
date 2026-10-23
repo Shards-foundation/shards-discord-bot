@@ -11,15 +11,22 @@ import { GatewayIntentBits, MessageFlags, Events } from 'discord.js';
 // Boundary doubles replace Discord network operations, never the command logic.
 function interaction(overrides = {}) {
   const replies = [];
-  return { isChatInputCommand: () => true, commandName: 'ping',
-    client: { ws: { ping: 42 } }, user: { username: 'Alice' },
+  const result = {
+    isChatInputCommand: () => true,
+    commandName: 'ping',
+    client: { ws: { ping: 42 } },
+    user: { username: 'Alice' },
     options: { getInteger: () => null, getString: () => '', getSubcommand: () => 'status' },
-    deferred: false, replied: false, replies,
+    deferred: false,
+    replied: false,
+    replies,
     reply: async payload => { replies.push(payload); },
-    deferReply: async () => { i.deferred = true; },
-    editReply: async payload => { i.replied = true; replies.push(payload); },
+    deferReply: async () => { result.deferred = true; },
+    editReply: async payload => { result.replied = true; replies.push(payload); },
     followUp: async payload => { replies.push(payload); },
-    ...overrides };
+    ...overrides,
+  };
+  return result;
 }
 
 test('config uses the Shards app ID and trims supplied credentials', () => {
