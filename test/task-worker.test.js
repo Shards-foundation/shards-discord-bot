@@ -53,5 +53,5 @@ test('worker leaves an empty queue untouched', async () => {
 
 test('worker rejects unsafe poll intervals and missing dependencies', () => {
   assert.throws(() => createTaskWorker({ taskStore: {}, ollamaClient: {} }), /task store/);
-  assert.throws(() => createTaskWorker({ taskStore: fakeStore(), ollamaClient: {}, pollIntervalMs: 10 }), /pollIntervalMs/);
+  assert.throws(() => createTaskWorker({ taskStore: fakeStore(), ollamaClient: { async chat() {} }, pollIntervalMs: 10 }), /pollIntervalMs/);
 });
