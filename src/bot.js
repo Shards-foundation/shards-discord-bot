@@ -1,17 +1,19 @@
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { handleInteraction } from './commands.js';
 import { createTaskStore } from './tasks.js';
+import { createOllamaClient } from './ollama.js';
 
-export function createBot(logger = console, { taskStore = createTaskStore({
-  filePath: process.env.SHARDS_TASK_STORE_PATH || '.data/tasks.json',
-}) } = {}) {
+export function createBot(logger = console, {
+  taskStore = createTaskStore({ filePath: process.env.SHARDS_TASK_STORE_PATH || '.data/tasks.json' }),
+  ollamaClient = createOllamaClient(),
+} = {}) {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds],
     allowedMentions: { parse: [] },
   });
   client.once(Events.ClientReady, ready => logger.info(`Shards inc is ready (${ready.user.id}).`));
   client.on(Events.InteractionCreate, interaction => {
-    void handleInteraction(interaction, logger, taskStore).catch(() => logger.error('Interaction processing failed.'));
+    void handleInteraction(interaction, logger, taskStore, fetch, ollamaClient).catch(() => logger.error('Interaction processing failed.'));
   });
   client.on(Events.Error, () => logger.error('Discord client error.'));
   client.on(Events.ShardError, () => logger.error('Discord gateway connection error.'));
