@@ -5,6 +5,8 @@
 
 # Dependencies
 node_modules/
+# Local durable task ledger; production deployments must use persistent storage.
+.data/
 
 # Test and coverage output
 coverage/
