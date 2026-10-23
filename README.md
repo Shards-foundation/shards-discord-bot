@@ -73,7 +73,9 @@ These checks are designed to run without credentials or Discord network access. 
 
 Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. The worker supports two explicit modes: `chat` (text generation without tools) and `github_research` (bounded public GitHub search, metadata, and safe text-file reads). Research mode cannot access private repositories, write to GitHub, execute code, or use arbitrary URLs. The worker stores generated results or a non-sensitive failure code. Owners can retry failed tasks that have remaining attempts and inspect the event history; audit views are scoped to the owning user and guild. A crash can cause a task to be retried; use a shared transactional database and cross-process leases before running multiple bot instances.
 
-Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing. ### Ollama + Qwen
+Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing.
+
+### Ollama + Qwen
 
 The bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded prompt, and a bounded generation length. The default model is `qwen3.5:4b`; override it with `OLLAMA_MODEL` after pulling that model on the Ollama server. Ollama's API is unauthenticated by default, so bind it to localhost or a trusted private network; do not expose port 11434 directly to the public internet.
 
@@ -132,7 +134,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md
 
 The background worker claims queued tasks from the durable ledger, submits the request to the configured Ollama model, and stores the result for the requester to retrieve with `/task status`. Task transitions and worker outcomes are recorded in the task event ledger. The worker is deliberately **text-only**: it has no shell, filesystem, network, GitHub write, or Discord message-send tools. It must not claim to have performed external actions. Requests that require real-world changes receive guidance or a blocker instead of an unverified success claim.
 
-The current JSON ledger is designed for one bot process and one persistent data volume. Do not scale to multiple replicas or shared workers until the ledger is replaced with a transactional shared database and cross-process leases. Ollama failures mark a task failed with a non-sensitive failure code; inspect the bot logs and retry by submitting a new request after restoring the model service.
+The current JSON ledger is designed for one bot process and one persistent data volume. Do not scale to multiple replicas or shared workers until the ledger is replaced with a transactional shared database and cross-process leases. Ollama failures mark a task failed with a non-sensitive failure code; inspect the bot logs, restore the model service, then use `/task retry` while the task has attempts remaining.
 
 
 ## Live inference verification
