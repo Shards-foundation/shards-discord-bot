@@ -43,7 +43,7 @@ test('task slash commands durably submit, inspect, and cancel only queued work',
   await handleInteraction(submit, { error() {} }, store);
   assert.equal(submit.replies[0].flags, MessageFlags.Ephemeral);
   assert.match(submit.replies[1].content, /saved to the durable queue/);
-  assert.match(submit.replies[1].content, /No task executor is configured/);
+  assert.match(submit.replies[1].content, /local Qwen worker will process it/);
   const taskId = submit.replies[1].content.match(/Task ([\w-]+) was/)[1];
 
   const status = taskInteraction('status', { taskId });
