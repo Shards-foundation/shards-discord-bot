@@ -62,6 +62,7 @@ These checks are designed to run without credentials or Discord network access. 
 - `/coinflip` — returns heads or tails.
 - `/github repo repository` — looks up a public repository by `owner/name`, returning description, stars, forks, open issues and primary language. The request is fixed to GitHub's public API, uses a five-second timeout, and does not require a token.
 - `/ai ask prompt` — runs a real inference request against the configured Ollama model and privately returns the response.
+- `/ai research prompt` — lets Qwen call a bounded set of read-only public GitHub tools (repository search, repository metadata, and public text-file reads) before producing a source-linked summary.
 - `/ai status` — checks API reachability and whether the configured model is installed.
 - `/ai models` — lists the models available to the configured Ollama server.
 - `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
