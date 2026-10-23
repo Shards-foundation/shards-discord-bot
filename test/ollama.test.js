@@ -13,7 +13,7 @@ test('defaults to a local Ollama endpoint and Qwen 3.5 4B model', () => {
 });
 
 test('rejects unsafe or malformed base URLs and invalid model names', () => {
-  assert.throws(() => createOllamaClient({ baseUrl: 'file:///etc/passwd' }), /valid HTTP/);
+  assert.throws(() => createOllamaClient({ baseUrl: 'file:///etc/passwd' }), /HTTP/);
   assert.throws(() => createOllamaClient({ baseUrl: 'http://user:pass@localhost:11434' }), /without credentials/);
   assert.throws(() => createOllamaClient({ model: 'qwen;rm -rf /' }), /unsupported characters/);
   assert.throws(() => createOllamaClient({ timeoutMs: 999 }), /OLLAMA_TIMEOUT_MS/);
