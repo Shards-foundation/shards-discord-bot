@@ -41,7 +41,9 @@ export function createTaskWorker({
     const task = await taskStore.claimNext(workerId);
     if (!task) return { processed: false };
     try {
-      const answer = await ollamaClient.chat(buildTaskPrompt(task.request));
+      const answer = task.mode === 'github_research'
+        ? await ollamaClient.research(task.request)
+        : await ollamaClient.chat(buildTaskPrompt(task.request));
       const result = typeof answer?.content === 'string' && answer.content.trim()
         ? answer.content.trim().slice(0, MAX_RESULT_CHARS)
         : 'The configured model returned an empty response. Please retry with a more specific request.';

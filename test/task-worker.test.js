@@ -31,6 +31,23 @@ test('worker claims a queued task, sends a bounded prompt to Qwen and persists i
   assert.deepEqual(store.calls[1], ['finish', 'task-1', 'test-worker', { result: 'Idempotency makes retries safe.' }]);
 });
 
+test('research-mode tasks use only the bounded read-only GitHub research client', async () => {
+  const researchTask = { ...task, mode: 'github_research', request: 'Research Ollama public repository' };
+  const store = fakeStore({ claimed: researchTask });
+  let received;
+  const worker = createTaskWorker({
+    taskStore: store,
+    ollamaClient: {
+      async chat() { throw new Error('chat path must not run'); },
+      async research(prompt) { received = prompt; return { content: 'Found public repository evidence.' }; },
+    },
+    logger: { error() {} },
+  });
+  const outcome = await worker.processOnce();
+  assert.equal(received, researchTask.request);
+  assert.equal(outcome.task.result, 'Found public repository evidence.');
+});
+
 test('worker marks model failures as failed without exposing exception details', async () => {
   const store = fakeStore();
   const worker = createTaskWorker({

@@ -102,12 +102,13 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
     });
   }
 
-  async function submit({ requesterId, guildId, request, idempotencyKey }) {
+  async function submit({ requesterId, guildId, request, idempotencyKey, mode = 'chat' }) {
     validId(requesterId, 'requesterId');
     validId(guildId, 'guildId');
     if (typeof request !== 'string' || !request.trim() || request.length > MAX_REQUEST_LENGTH) {
       throw new Error(`request must contain 1-${MAX_REQUEST_LENGTH} characters.`);
     }
+    if (!['chat', 'github_research'].includes(mode)) throw new Error('mode must be chat or github_research.');
     if (typeof idempotencyKey !== 'string' || !/^[\w-]{8,100}$/.test(idempotencyKey)) {
       throw new Error('idempotencyKey must contain 8-100 letters, digits, underscores, or hyphens.');
     }
@@ -119,7 +120,7 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
       if (database.tasks.length >= MAX_TASKS) throw new Error('Task capacity reached; operator maintenance is required.');
       const at = now().toISOString();
       const task = {
-        id: id(), requesterId, guildId, request: request.trim(), idempotencyKey,
+        id: id(), requesterId, guildId, request: request.trim(), idempotencyKey, mode,
         state: 'queued', createdAt: at, updatedAt: at, attempts: 0,
         result: null, failureCode: null,
       };

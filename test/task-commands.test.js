@@ -75,6 +75,18 @@ test('task retry and events commands expose safe lifecycle state only to the tas
   assert.match(events.replies[1].content, /retry_requested/);
 });
 
+test('task research queues the explicit read-only GitHub research mode', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'shards-task-research-command-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = createTaskStore({ filePath: join(directory, 'tasks.json') });
+  const research = taskInteraction('research', { request: 'Compare public Ollama and Qwen repositories' });
+  await handleInteraction(research, { error() {} }, store);
+  assert.match(research.replies[1].content, /mode: github_research/);
+  const taskId = research.replies[1].content.match(/Task ([A-Za-z0-9-]+) was/)[1];
+  const stored = await store.get(taskId, userId, { guildId });
+  assert.equal(stored.mode, 'github_research');
+});
+
 test('task status does not reveal another server member’s work', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'shards-task-command-auth-test-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
