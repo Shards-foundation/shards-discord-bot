@@ -101,6 +101,12 @@ export const commands = [
       },
       {
         type: ApplicationCommandOptionType.Subcommand,
+        name: 'research',
+        description: 'Queue public GitHub research using Qwen read-only tools.',
+        options: [{ type: ApplicationCommandOptionType.String, name: 'request', description: 'Research question about public GitHub repositories.', required: true, min_length: 2, max_length: 2000 }],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
         name: 'status',
         description: 'Inspect one of your task requests.',
         options: [{
@@ -191,14 +197,15 @@ async function handleTaskCommand(interaction, taskStore) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const subcommand = interaction.options.getSubcommand();
   let content;
-  if (subcommand === 'submit') {
+  if (subcommand === 'submit' || subcommand === 'research') {
     const task = await taskStore.submit({
       requesterId: interaction.user.id,
       guildId: interaction.guildId,
       request: interaction.options.getString('request', true),
       idempotencyKey: interaction.id,
+      mode: subcommand === 'research' ? 'github_research' : 'chat',
     });
-    content = `Task ${task.id} was saved to the durable queue (status: ${task.state}). The local Qwen worker will process it when Ollama is available. Check /task status for the result.`;
+    content = `Task ${task.id} was saved to the durable queue (mode: ${task.mode ?? 'chat'}, status: ${task.state}). The local Qwen worker will process it when the required service is available. Check /task status for the result.`;
   } else {
     const taskId = interaction.options.getString('task_id', true);
     if (subcommand === 'status') {
@@ -227,7 +234,7 @@ const HELP_TEXT = [
   '`/ping` — gateway latency check',
   '`/hello` — greeting',
   '`/system status` — runtime and connection status',
-  '`/task submit`, `/task status`, `/task cancel`, `/task retry`, `/task events` — durable queue, local Qwen task execution, retries, and audit history',
+  '`/task submit` — queue a Qwen text task; `/task research` — queue public GitHub research using bounded read-only tools; `/task status`, `/task cancel`, `/task retry`, `/task events` — lifecycle, retries, and audit history',
   '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
