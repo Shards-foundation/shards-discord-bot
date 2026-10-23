@@ -88,6 +88,7 @@ test('help lists community commands and truthfully labels task execution', async
   await handleInteraction(i);
   assert.match(i.replies[0].content, /\/system status/);
   assert.match(i.replies[0].content, /\/choose/);
+  assert.match(i.replies[0].content, /\/github repo/);
   assert.match(i.replies[0].content, /no executor configured/);
 });
 test('roll uses requested sides and defaults to a six-sided die', async () => {
