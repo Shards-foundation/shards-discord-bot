@@ -20,10 +20,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, shards-deploy]
     timeout-minutes: 30
     steps:
-      - name: Check out trusted main commit
+      - name: Check out triggering commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
           clean: true
 
@@ -76,7 +76,7 @@ jobs:
             --env-file "$DEPLOY_DIR/.env" \
             -f "$DEPLOY_DIR/compose.yaml" up -d --build --remove-orphans
 
-      - name: Report deployment revision
+      - name: Report deployed revision
         shell: bash
         run: |
           set -euo pipefail
