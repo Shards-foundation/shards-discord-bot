@@ -104,4 +104,4 @@ This repository is a foundation, not a claim of feature completeness. Sensible n
 
 ## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. This is a private, unpublished project with no permissive license (`UNLICENSED`).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. The [Terms of Service](TERMS_OF_SERVICE.md) and [Privacy Policy](PRIVACY_POLICY.md) are **drafts only**: complete their legal-entity, contact, jurisdiction, effective-date, deployment, and retention details and obtain legal review before publishing or relying on them. This is a private, unpublished project with no permissive license (`UNLICENSED`).
