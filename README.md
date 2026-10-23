@@ -10,7 +10,7 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | --- | --- |
 | Runtime | Node.js `>=24.17`, ESM, discord.js 14 |
 | Gateway intents | `Guilds` only; no privileged intents |
-| Commands | `/ai ask`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task submit`, `/task status`, `/task cancel`, community utilities |
+| Commands | `/ai ask`, `/ai research`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task submit`, `/task research`, `/task status`, `/task cancel`, `/task retry`, `/task events`, community utilities |
 | AI inference | Real Ollama `/api/chat` integration using configured Qwen model; no cloud AI key required |
 | Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
@@ -79,7 +79,7 @@ The bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded
 
 For a host-installed Ollama server, set `OLLAMA_BASE_URL=http://127.0.0.1:11434`. When the bot runs inside Docker Compose, set it to `http://ollama:11434` (the Compose configuration already does this). Discord and Ollama must both be reachable from the bot's runtime. A model cannot run inside Discord itself; inference occurs on the machine/container hosting Ollama.
 
-The `/ai ask` command is text chat; `/ai research` adds a bounded, read-only public GitHub tool loop. The queued-task worker only generates text and has no shell, filesystem, network, or write-capable tools. Any future side-effecting tools require separate permissioned adapters, approval rules, and independent verification.
+The `/ai ask` command is text chat; `/ai research` and `/task research` use a bounded, read-only public GitHub tool loop. Chat tasks have no tools. Research tasks can search public repositories, inspect metadata, and read bounded text files only; they cannot access private repositories, write to GitHub, execute code, or browse arbitrary URLs. Any future side-effecting tools require separate permissioned adapters, approval rules, and independent verification.
 
 The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
 
@@ -138,3 +138,8 @@ The current JSON ledger is designed for one bot process and one persistent data 
 ## Live inference verification
 
 Run `npm run smoke:ollama` from the bot host/container after configuring `OLLAMA_BASE_URL` and `OLLAMA_MODEL`. This checks the live Ollama API, confirms the configured model is installed, and performs a real inference request. It does not connect to Discord or register commands. The CI suite uses mocked responses and cannot replace this runtime smoke check. Do not expose Ollama's unauthenticated API directly to the public internet.
+
+
+## Live runtime preflight
+
+After setting `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL` in the local `.env`, run `npm run smoke:live`. This validates the bot token against Discord's identity endpoint, checks that the returned bot ID matches the configured application ID, then verifies the configured Ollama model and performs live inference. It does **not** log credentials, connect the gateway, register slash commands, or change Discord settings. Use `npm run commands:preview` to inspect the command payload; only run guarded guild-scoped registration when you intentionally want to update a test server.
