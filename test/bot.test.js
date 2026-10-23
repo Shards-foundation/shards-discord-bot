@@ -7,14 +7,21 @@ import { registrationPlan, registerCommands } from '../src/registration.js';
 import { createBot, startBot } from '../src/bot.js';
 import { GatewayIntentBits, MessageFlags, Events } from 'discord.js';
 
-// Boundary doubles replace Discord network operations, never the command logic.
 function interaction(overrides = {}) {
   const replies = [];
-  return { isChatInputCommand: () => true, commandName: 'ping',
-    client: { ws: { ping: 42 } }, user: { username: 'Alice' },
-    deferred: false, replied: false, replies,
-    reply: async (payload) => { replies.push(payload); },
-    followUp: async (payload) => { replies.push(payload); }, ...overrides };
+  return {
+    isChatInputCommand: () => true,
+    commandName: 'ping',
+    client: { ws: { ping: 42 }, guilds: { cache: { size: 3 } } },
+    user: { username: 'Alice' },
+    options: { getInteger: () => null, getString: () => '' },
+    deferred: false,
+    replied: false,
+    replies,
+    reply: async payload => { replies.push(payload); },
+    followUp: async payload => { replies.push(payload); },
+    ...overrides,
+  };
 }
 
 test('config uses the Shards app ID and trims supplied credentials', () => {
@@ -30,11 +37,18 @@ test('preview config needs no token but rejects invalid IDs', () => {
   assert.equal(readConfig({}, { requireToken: false }).applicationId, '1562965805413568532');
   assert.throws(() => readConfig({ DISCORD_APPLICATION_ID: '0' }, { requireToken: false }), /DISCORD_APPLICATION_ID/);
 });
-test('registration payload exposes exactly the two supported chat commands', () => {
-  assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 },
-  ]);
-  for (const command of commands) assert.ok(command.description.length > 0);
+test('registration declares the expected chat commands and bounded option schemas', () => {
+  assert.deepEqual(commands.map(c => c.name), ['ping', 'hello', 'help', 'status', 'roll', 'choose', 'coinflip']);
+  for (const command of commands) {
+    assert.equal(command.type, 1);
+    assert.ok(command.description.length > 0);
+  }
+  const roll = commands.find(command => command.name === 'roll');
+  assert.equal(roll.options[0].min_value, 2);
+  assert.equal(roll.options[0].max_value, 1000);
+  const choose = commands.find(command => command.name === 'choose');
+  assert.equal(choose.options[0].required, true);
+  assert.equal(choose.options[0].max_length, 500);
 });
 test('ping replies with gateway latency and suppresses mentions', async () => {
   const i = interaction();
@@ -53,6 +67,40 @@ test('hello greets the invoking username without triggering mentions', async () 
   assert.match(i.replies[0].content, /Hello, @everyone/);
   assert.deepEqual(i.replies[0].allowedMentions, { parse: [] });
 });
+test('help lists the supported commands', async () => {
+  const i = interaction({ commandName: 'help' });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /\/status/);
+  assert.match(i.replies[0].content, /\/choose/);
+});
+test('status reports gateway, server count and process uptime', async () => {
+  const i = interaction({ commandName: 'status' });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /Gateway latency: 42 ms/);
+  assert.match(i.replies[0].content, /Connected servers: 3/);
+  assert.match(i.replies[0].content, /Process uptime:/);
+});
+test('roll uses the requested sides and defaults to a six-sided die', async () => {
+  const requested = interaction({ commandName: 'roll', options: { getInteger: () => 20 } });
+  await handleInteraction(requested);
+  assert.match(requested.replies[0].content, /on a d20/);
+  const defaulted = interaction({ commandName: 'roll' });
+  await handleInteraction(defaulted);
+  assert.match(defaulted.replies[0].content, /on a d6/);
+});
+test('choose returns one of the supplied options and rejects too few options', async () => {
+  const i = interaction({ commandName: 'choose', options: { getString: () => ' alpha, beta, gamma ' } });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /I choose: \*\*(alpha|beta|gamma)\*\*/);
+  const invalid = interaction({ commandName: 'choose', options: { getString: () => 'only one' } });
+  await handleInteraction(invalid);
+  assert.match(invalid.replies[0].content, /between 2 and 20/);
+});
+test('coinflip returns only heads or tails', async () => {
+  const i = interaction({ commandName: 'coinflip' });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /Heads|Tails/);
+});
 test('non-chat interactions and unknown commands are ignored', async () => {
   for (const i of [interaction({ isChatInputCommand: () => false }), interaction({ commandName: 'missing' })]) {
     await handleInteraction(i);
@@ -62,7 +110,7 @@ test('non-chat interactions and unknown commands are ignored', async () => {
 test('command failure sends a private fallback and logs no credential-bearing error', async () => {
   const errors = [];
   let attempts = 0;
-  const i = interaction({ reply: async (payload) => {
+  const i = interaction({ reply: async payload => {
     if (++attempts === 1) throw new Error('sensitive-token');
     i.replies.push(payload);
   } });
@@ -90,7 +138,7 @@ test('registration requires a scope and a second explicit global safeguard', () 
   assert.deepEqual(registrationPlan(['--apply', '--guild', '123456789012345678']), { apply: true, scope: 'guild', guildId: '123456789012345678' });
 });
 test('registration rejects invalid, unknown, repeated or conflicting arguments', () => {
-  for (const args of [['--guild'], ['--guild', 'abc'], ['--wat'], ['--global', '--guild', '123456789012345678'], ['--apply', '--apply'], ['--confirm-global']]) {
+  for (const args of [['--guild'], ['--guild', 'abc'], ['--wat'], ['--apply', '--apply'], ['--global', '--guild', '123456789012345678'], ['--confirm-global']]) {
     assert.throws(() => registrationPlan(args));
   }
 });
@@ -126,6 +174,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'status', 'roll', 'choose', 'coinflip']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });

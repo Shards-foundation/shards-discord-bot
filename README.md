@@ -1,6 +1,6 @@
 # Shards Discord Bot
 
-A private, safety-first Discord application foundation for **Shards inc**. The current bot provides `/ping` and `/hello`, with offline tests and deliberately guarded slash-command registration.
+A private, safety-first Discord application for Shards. The first community command pack now includes help, live runtime status, dice rolls, random choice and coin flips alongside ping and hello.
 
 > **Status:** foundation / development. No production deployment is configured. Startup does not register commands, and no live Discord changes are part of routine development.
 
@@ -10,20 +10,11 @@ A private, safety-first Discord application foundation for **Shards inc**. The c
 | --- | --- |
 | Runtime | Node.js `>=24.17`, ESM, discord.js 14 |
 | Gateway intents | `Guilds` only; no privileged intents |
-| Commands | `/ping`, `/hello` |
+| Commands | `/ping`, `/hello`, `/help`, `/status`, `/roll`, `/choose`, `/coinflip` |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
 | Tests | Node's built-in test runner; no Discord credentials required |
 | Secrets | Local `.env` only; never committed or logged |
 | Deployment | Not configured |
-
-## Repository map
-
-```text
-src/                 Bot startup, configuration, commands, registration logic
-scripts/             Safe operator-facing command tools
-test/                Offline unit and safety-boundary tests
-.github/workflows/   CI and automated dependency maintenance
-```
 
 ## Quick start
 
@@ -38,6 +29,18 @@ Set `DISCORD_BOT_TOKEN` in the local `.env` file only. Never commit the file, pa
 
 Do not run the live bot until the application has been deliberately authorized in the intended Discord environment and the token is supplied locally. `npm start` connects to Discord but does not register slash commands.
 
+## Commands
+
+- `/ping` — reports Discord gateway latency, or `unavailable` until a valid measurement exists.
+- `/hello` — greets the invoking username as plain text.
+- `/help` — lists commands and their purpose.
+- `/status` — reports gateway latency, connected server count and process uptime.
+- `/roll [sides]` — uses Node's cryptographic random integer generator to roll a die from 2 to 1000 sides; defaults to six.
+- `/choose options` — chooses randomly from 2–20 comma-separated options. Inputs are bounded and empty entries are ignored.
+- `/coinflip` — returns heads or tails using the same cryptographic random source.
+
+All command replies disable automatic mention parsing. The bot does not read ordinary messages and continues to use only the minimum `Guilds` gateway intent.
+
 ## Development checks
 
 ```sh
@@ -46,14 +49,7 @@ npm test
 npm audit --omit=dev --audit-level=high
 ```
 
-These checks are designed to run without credentials or Discord network access. GitHub Actions runs the syntax checks and test suite on pushes and pull requests; dependency updates are proposed by Dependabot.
-
-## Commands
-
-- `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
-- `/hello` — greets the invoking username as plain text. Mention parsing is disabled, so user-controlled text cannot trigger mass mentions.
-
-The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
+These checks are designed to run without credentials or Discord network access. GitHub Actions runs syntax checks and tests on pushes and pull requests; dependency updates are proposed by Dependabot.
 
 ## Slash-command registration
 
@@ -63,37 +59,24 @@ Registration uses Discord's bulk overwrite endpoint, which replaces **all** comm
 npm run commands:preview
 ```
 
-To deliberately apply a reviewed change to one test guild:
+To deliberately apply the reviewed command set to one test guild:
 
 ```sh
 npm run commands:register -- --apply --guild GUILD_ID
 ```
 
-A global overwrite has an additional explicit safeguard and should be rare:
+A global overwrite has an additional explicit safeguard:
 
 ```sh
 npm run commands:register -- --apply --global --confirm-global
 ```
 
-Never run a write command casually or as part of routine CI. The registration CLI intentionally avoids printing raw Discord API errors that could contain sensitive request metadata.
+Never run a write command casually or as part of routine CI. No live Discord command registration is included in this change.
 
-## Configuration reference
+## Current limitations and next build stages
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `DISCORD_BOT_TOKEN` | For live startup / writes | Bot token; store locally in ignored `.env` |
-| `DISCORD_APPLICATION_ID` | No | Numeric application snowflake; defaults to `1562965805413568532` |
+This first feature slice is intentionally stateless: it adds no database, message-content intent, third-party AI provider, or privileged permissions. It does not yet execute agent tasks or persist user data. The next substantive platform step should introduce durable task records, explicit per-server authorization, auditable state transitions, cancellation and bounded workers before exposing agent execution in Discord.
 
-The checked-in `.env.example` contains no credentials. Rotate a token immediately in the Discord Developer Portal if it is exposed.
+## Security and project status
 
-## Operational checklist
-
-Before first use, confirm the application and target guild, grant only the permissions needed, keep the bot token outside GitHub and source control, preview command registration, and test guild-scoped changes before considering any global overwrite. There is no deployment workflow or production credential configured in this repository.
-
-## Project status and roadmap
-
-This repository is a foundation, not a claim of feature completeness. Sensible next steps should be driven by actual community needs and reviewed for least privilege, privacy, accessibility, reliability, and maintainability. Avoid adding data collection, privileged intents, external services, or production automation without an explicit product and security decision.
-
-## Contributing and security
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. This is a private, unpublished project with no permissive license (`UNLICENSED`).
+Keep the bot token outside source control and rotate it immediately if exposed. See [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md). This is a private, unpublished project with no permissive license (`UNLICENSED`).
