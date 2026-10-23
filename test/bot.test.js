@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readConfig } from '../src/config.js';
-import { commands, handleInteraction } from '../src/commands.js';
+import { commands, handleInteraction, lookupPublicRepository } from '../src/commands.js';
 import { registrationPlan, registerCommands } from '../src/registration.js';
 import { createBot, startBot } from '../src/bot.js';
 import { createShutdownHandler } from '../src/shutdown.js';
@@ -15,8 +15,11 @@ function interaction(overrides = {}) {
     client: { ws: { ping: 42 } }, user: { username: 'Alice' },
     options: { getInteger: () => null, getString: () => '', getSubcommand: () => 'status' },
     deferred: false, replied: false, replies,
-    reply: async (payload) => { replies.push(payload); },
-    followUp: async (payload) => { replies.push(payload); }, ...overrides };
+    reply: async payload => { replies.push(payload); },
+    deferReply: async () => { i.deferred = true; },
+    editReply: async payload => { i.replied = true; replies.push(payload); },
+    followUp: async payload => { replies.push(payload); },
+    ...overrides };
 }
 
 test('config uses the Shards app ID and trims supplied credentials', () => {
@@ -34,12 +37,13 @@ test('preview config needs no token but rejects invalid IDs', () => {
 });
 test('registration payload exposes exactly the two supported chat commands', () => {
   assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
+    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
   ]);
   for (const command of commands) assert.ok(command.description.length > 0);
   assert.equal(commands.find(c => c.name === 'roll').options[0].min_value, 2);
   assert.equal(commands.find(c => c.name === 'roll').options[0].max_value, 1000);
   assert.equal(commands.find(c => c.name === 'choose').options[0].max_length, 500);
+  assert.equal(commands.find(c => c.name === 'github').options[0].name, 'repo');
   assert.equal(commands.find(c => c.name === 'system').options[0].name, 'status');
   assert.deepEqual(commands.find(c => c.name === 'task').options.map(option => option.name), ['submit', 'status', 'cancel']);
 });
@@ -100,6 +104,49 @@ test('coinflip returns only heads or tails', async () => {
   const i = interaction({ commandName: 'coinflip' });
   await handleInteraction(i);
   assert.match(i.replies[0].content, /Heads|Tails/);
+});
+test('GitHub lookup validates repository paths before making a request', async () => {
+  let called = false;
+  const result = await lookupPublicRepository('owner/name/extra', async () => { called = true; });
+  assert.equal(result.ok, false);
+  assert.equal(called, false);
+});
+test('GitHub lookup reports bounded public repository metadata', async () => {
+  let requestedUrl = '';
+  const result = await lookupPublicRepository('octocat/Hello-World', async (url, options) => {
+    requestedUrl = url;
+    assert.equal(options.method, 'GET');
+    assert.equal(options.headers.Accept, 'application/vnd.github+json');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ full_name: 'octocat/Hello-World', description: 'Example repo', stargazers_count: 1234, forks_count: 12, open_issues_count: 3, language: 'JavaScript' }),
+    };
+  });
+  assert.equal(requestedUrl, 'https://api.github.com/repos/octocat/Hello-World');
+  assert.equal(result.ok, true);
+  assert.match(result.content, /octocat\\/Hello-World/);
+  assert.match(result.content, /1,234/);
+  assert.match(result.content, /Primary language: JavaScript/);
+});
+test('GitHub lookup does not expose private repository existence or raw API errors', async () => {
+  const missing = await lookupPublicRepository('owner/private-repo', async () => ({ ok: false, status: 404 }));
+  assert.match(missing.content, /not found or not publicly accessible/);
+  const limited = await lookupPublicRepository('owner/repo', async () => ({ ok: false, status: 403 }));
+  assert.match(limited.content, /rate limit/);
+});
+test('GitHub command responds privately and suppresses mentions', async () => {
+  const i = interaction({
+    commandName: 'github',
+    options: { getSubcommand: () => 'repo', getString: () => 'octocat/Hello-World' },
+  });
+  await handleInteraction(i, { error() {} }, undefined, async () => ({
+    ok: true, status: 200,
+    json: async () => ({ full_name: 'octocat/Hello-World', description: '@everyone demo', stargazers_count: 1, forks_count: 0, open_issues_count: 0, language: null }),
+  }));
+  assert.equal(i.deferred, true);
+  assert.equal(i.replies[0].allowedMentions.parse.length, 0);
+  assert.match(i.replies[0].content, /octocat\\/Hello-World/);
 });
 test('non-chat interactions and unknown commands are ignored', async () => {
   for (const i of [interaction({ isChatInputCommand: () => false }), interaction({ commandName: 'missing' })]) {
@@ -195,6 +242,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'system', 'task']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'system', 'task']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });

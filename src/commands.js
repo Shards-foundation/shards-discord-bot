@@ -11,6 +11,23 @@ export const commands = [
     options: [{ type: ApplicationCommandOptionType.String, name: 'options', description: 'Enter 2–20 options separated by commas.', required: true, max_length: 500 }] },
   { name: 'coinflip', description: 'Flip a fair coin.', type: ApplicationCommandType.ChatInput },
   {
+    name: 'github',
+    description: 'Look up a public GitHub repository.',
+    type: ApplicationCommandType.ChatInput,
+    options: [{
+      type: ApplicationCommandOptionType.Subcommand,
+      name: 'repo',
+      description: 'Show public repository details.',
+      options: [{
+        type: ApplicationCommandOptionType.String,
+        name: 'repository',
+        description: 'Repository in owner/name format.',
+        required: true,
+        max_length: 140,
+      }],
+    }],
+  },
+  {
     name: 'system',
     description: 'Inspect bot runtime status.',
     type: ApplicationCommandType.ChatInput,
@@ -124,15 +141,57 @@ const HELP_TEXT = [
   '`/help` — this command list',
 ].join('\n');
 
+export async function lookupPublicRepository(repository, fetchImpl = fetch) {
+  if (typeof repository !== 'string' || repository.length > 140) {
+    return { ok: false, content: 'Enter a public repository as owner/name.' };
+  }
+  const [owner, name, extra] = repository.trim().split('/');
+  const validOwner = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner ?? '');
+  const validName = /^[A-Za-z0-9._-]{1,100}$/.test(name ?? '');
+  if (!validOwner || !validName || extra !== undefined) {
+    return { ok: false, content: 'Invalid repository format. Use owner/name (letters, numbers, dots, hyphens or underscores).' };
+  }
+  try {
+    const response = await fetchImpl(`https://api.github.com/repos/${owner}/${name}`, {
+      method: 'GET',
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Shards-Discord-Bot' },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (response.status === 404) return { ok: false, content: 'Repository not found or not publicly accessible.' };
+    if (response.status === 403 || response.status === 429) return { ok: false, content: 'GitHub API rate limit reached. Try again later.' };
+    if (!response.ok) return { ok: false, content: 'GitHub lookup is temporarily unavailable.' };
+    const data = await response.json();
+    if (typeof data.full_name !== 'string' || !Number.isFinite(data.stargazers_count)) {
+      return { ok: false, content: 'GitHub returned an unexpected repository response.' };
+    }
+    const language = typeof data.language === 'string' ? data.language : 'Not specified';
+    const description = typeof data.description === 'string' && data.description.trim()
+      ? data.description.trim().replace(/[\\r\\n\\t]/g, ' ').slice(0, 180)
+      : 'No description provided.';
+    return {
+      ok: true,
+      content: [
+        `**${data.full_name}**`,
+        description,
+        `Stars: ${data.stargazers_count.toLocaleString('en-GB')} · Forks: ${Number(data.forks_count || 0).toLocaleString('en-GB')} · Open issues: ${Number(data.open_issues_count || 0).toLocaleString('en-GB')}`,
+        `Primary language: ${language}`,
+        `https://github.com/${owner}/${name}`,
+      ].join('\\n'),
+    };
+  } catch {
+    return { ok: false, content: 'GitHub lookup timed out or could not connect. Try again later.' };
+  }
+}
+
 function chooseOption(raw) {
   const options = raw.split(',').map(option => option.trim()).filter(Boolean);
   if (options.length < 2 || options.length > 20) return { error: 'Provide between 2 and 20 non-empty options, separated by commas.' };
   return { value: options[randomInt(options.length)] };
 }
 
-export async function handleInteraction(interaction, logger = console, taskStore) {
+export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch) {
   if (!interaction.isChatInputCommand()) return;
-  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'system', 'task'].includes(interaction.commandName);
+  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'system', 'task'].includes(interaction.commandName);
   if (!supported) return;
   try {
     let content;
@@ -154,6 +213,12 @@ export async function handleInteraction(interaction, logger = console, taskStore
       content = result.error ?? `I choose: **${result.value}**`;
     } else if (interaction.commandName === 'coinflip') {
       content = randomInt(2) === 0 ? '🪙 Heads.' : '🪙 Tails.';
+    } else if (interaction.commandName === 'github') {
+      if (interaction.options.getSubcommand() !== 'repo') return;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const result = await lookupPublicRepository(interaction.options.getString('repository', true), fetchImpl);
+      await interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
+      return;
     } else if (interaction.commandName === 'task') {
       if (!taskStore) throw new Error('Task store is unavailable.');
       await handleTaskCommand(interaction, taskStore);
