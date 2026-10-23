@@ -156,6 +156,52 @@ test('GitHub command responds privately and suppresses mentions', async () => {
   assert.equal(i.replies[0].allowedMentions.parse.length, 0);
   assert.match(i.replies[0].content, /octocat\/Hello-World/);
 });
+test('AI ask invokes the configured Ollama client and returns its answer privately', async () => {
+  const i = interaction({
+    commandName: 'ai',
+    options: { getSubcommand: () => 'ask', getString: () => 'Explain event sourcing.' },
+  });
+  const calls = [];
+  const ollamaClient = {
+    model: 'qwen3.5:4b',
+    chat: async prompt => {
+      calls.push(prompt);
+      return { model: 'qwen3.5:4b', content: 'Event sourcing records state changes as events.', totalDurationNs: 2_000_000_000 };
+    },
+    listModels: async () => [],
+  };
+  await handleInteraction(i, { error() {} }, undefined, fetch, ollamaClient);
+  assert.deepEqual(calls, ['Explain event sourcing.']);
+  assert.equal(i.deferred, true);
+  assert.match(i.replies[0].content, /Event sourcing records state changes/);
+  assert.match(i.replies[0].content, /qwen3\.5:4b/);
+  assert.deepEqual(i.replies[0].allowedMentions, { parse: [] });
+});
+test('AI status and models query the configured Ollama endpoint', async () => {
+  const client = {
+    model: 'qwen3.5:4b',
+    chat: async () => { throw new Error('not expected'); },
+    listModels: async () => [{ name: 'qwen3.5:4b', size: 4_000_000_000 }, { name: 'nomic-embed-text:latest', size: 300_000_000 }],
+  };
+  const status = interaction({ commandName: 'ai', options: { getSubcommand: () => 'status' } });
+  await handleInteraction(status, { error() {} }, undefined, fetch, client);
+  assert.match(status.replies[0].content, /Ollama API: reachable/);
+  assert.match(status.replies[0].content, /Model installed: yes/);
+  const models = interaction({ commandName: 'ai', options: { getSubcommand: () => 'models' } });
+  await handleInteraction(models, { error() {} }, undefined, fetch, client);
+  assert.match(models.replies[0].content, /qwen3\.5:4b/);
+  assert.match(models.replies[0].content, /nomic-embed-text/);
+});
+test('AI endpoint failures are handled without leaking provider internals', async () => {
+  const i = interaction({ commandName: 'ai', options: { getSubcommand: () => 'ask', getString: () => 'hello' } });
+  await handleInteraction(i, { error() {} }, undefined, fetch, {
+    model: 'qwen3.5:4b',
+    chat: async () => { throw new Error('internal host secret'); },
+    listModels: async () => [],
+  });
+  assert.match(i.replies.at(-1).content, /Something went wrong/);
+  assert.ok(!JSON.stringify(i.replies).includes('internal host secret'));
+});
 test('non-chat interactions and unknown commands are ignored', async () => {
   for (const i of [interaction({ isChatInputCommand: () => false }), interaction({ commandName: 'missing' })]) {
     await handleInteraction(i);
@@ -250,6 +296,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'system', 'task']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });
