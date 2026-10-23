@@ -83,6 +83,36 @@ test('research uses Qwen tool calls to search public GitHub and returns the fina
   assert.equal(requests.filter(r => r.url === 'https://api.github.com/search/repositories?q=qwen%20ollama&per_page=5').length, 1);
 });
 
+
+test('research can inspect public repository metadata and read a bounded source file', async () => {
+  let round = 0;
+  const calls = [];
+  const client = createOllamaClient({ fetchImpl: async (url, options) => {
+    calls.push(url);
+    if (url === 'https://api.github.com/repos/ollama/ollama') {
+      return response(200, { full_name: 'ollama/ollama', description: 'Ollama', html_url: 'https://github.com/ollama/ollama', stargazers_count: 123, forks_count: 4, open_issues_count: 2, language: 'Go', default_branch: 'main', license: { spdx_id: 'MIT' } });
+    }
+    if (url === 'https://api.github.com/repos/ollama/ollama/contents/README.md') {
+      return response(200, { type: 'file', encoding: 'base64', path: 'README.md', html_url: 'https://github.com/ollama/ollama/blob/main/README.md', content: Buffer.from('Repository overview').toString('base64') });
+    }
+    if (url !== 'http://127.0.0.1:11434/api/chat') throw new Error('Unexpected URL: ' + url);
+    round += 1;
+    const messages = JSON.parse(options.body).messages;
+    if (round === 1) return response(200, { message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'get_public_github_repository', arguments: { owner: 'ollama', repo: 'ollama' } } }] } });
+    if (round === 2) {
+      assert.ok(messages.some(m => m.role === 'tool' && m.content.includes('"license":"MIT"')));
+      return response(200, { message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'read_public_github_file', arguments: { owner: 'ollama', repo: 'ollama', path: 'README.md' } } }] } });
+    }
+    assert.ok(messages.some(m => m.role === 'tool' && m.content.includes('Repository overview')));
+    return response(200, { message: { role: 'assistant', content: 'Ollama is documented in its public README. Source: https://github.com/ollama/ollama/blob/main/README.md' } });
+  } });
+  const result = await client.research('Inspect the Ollama repository and read its README.');
+  assert.match(result.content, /public README/);
+  assert.equal(result.toolCallsUsed, 2);
+  assert.ok(calls.includes('https://api.github.com/repos/ollama/ollama'));
+  assert.ok(calls.includes('https://api.github.com/repos/ollama/ollama/contents/README.md'));
+});
+
 test('research tool path validation rejects traversal and secret-like files', async () => {
   let modelRound = 0;
   const client = createOllamaClient({ fetchImpl: async (url, options) => {
