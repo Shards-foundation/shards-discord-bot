@@ -185,6 +185,23 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
     });
   }
 
+  async function retry(taskId, actorId, { guildId, isOperator = false } = {}) {
+    validId(actorId, 'actorId');
+    if (guildId !== undefined) validId(guildId, 'guildId');
+    return withLock(async () => {
+      await ensureLoaded();
+      const task = database.tasks.find(item => item.id === taskId);
+      if (!task) return null;
+      if ((task.requesterId !== actorId || (guildId && task.guildId !== guildId)) && !isOperator) throw new Error('Not authorised to retry this task.');
+      if (task.state !== 'failed') throw new Error('Only failed tasks can be retried.');
+      if (task.attempts >= MAX_ATTEMPTS) throw new Error('Task attempt limit reached; submit a new request.');
+      task.state = 'queued'; task.result = null; task.failureCode = null; task.updatedAt = now().toISOString();
+      recordEvent(task, 'retry_requested', actorId, { previousAttempts: task.attempts });
+      await persist();
+      return structuredClone(task);
+    });
+  }
+
   async function get(taskId, actorId, { guildId, isOperator = false } = {}) {
     validId(actorId, 'actorId');
     if (guildId !== undefined) validId(guildId, 'guildId');
@@ -196,8 +213,8 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
     });
   }
 
-  async function events(taskId, actorId, { isOperator = false } = {}) {
-    const task = await get(taskId, actorId, { isOperator });
+  async function events(taskId, actorId, { guildId, isOperator = false } = {}) {
+    const task = await get(taskId, actorId, { guildId, isOperator });
     if (!task) return null;
     return withLock(async () => {
       await ensureLoaded();
@@ -205,5 +222,5 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
     });
   }
 
-  return { submit, claimNext, finish, cancel, get, events };
+  return { submit, claimNext, finish, cancel, retry, get, events };
 }
