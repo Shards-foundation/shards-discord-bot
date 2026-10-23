@@ -21,8 +21,8 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
-    entrypoint: ["/bin/sh", "-lc"]
-    command: ["ollama pull \"$OLLAMA_MODEL\""]
+    entrypoint: ["ollama"]
+    command: ["pull", "${OLLAMA_MODEL:-qwen3.5:4b}"]
     restart: "no"
 
   bot:
