@@ -5,6 +5,7 @@ import { readConfig } from '../src/config.js';
 import { commands, handleInteraction } from '../src/commands.js';
 import { registrationPlan, registerCommands } from '../src/registration.js';
 import { createBot, startBot } from '../src/bot.js';
+import { createShutdownHandler } from '../src/shutdown.js';
 import { GatewayIntentBits, MessageFlags, Events } from 'discord.js';
 
 // Boundary doubles replace Discord network operations, never the command logic.
@@ -32,9 +33,11 @@ test('preview config needs no token but rejects invalid IDs', () => {
 });
 test('registration payload exposes exactly the two supported chat commands', () => {
   assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 },
+    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
   ]);
   for (const command of commands) assert.ok(command.description.length > 0);
+  assert.equal(commands[2].options[0].name, 'status');
+  assert.deepEqual(commands[3].options.map(option => option.name), ['submit', 'status', 'cancel']);
 });
 test('ping replies with gateway latency and suppresses mentions', async () => {
   const i = interaction();
@@ -46,6 +49,18 @@ test('ping reports not-yet-known latency without a negative measurement', async 
   const i = interaction({ client: { ws: { ping: -1 } } });
   await handleInteraction(i);
   assert.match(i.replies[0].content, /unavailable/i);
+});
+test('/system status reports truthful runtime and gateway state', async () => {
+  const i = interaction({
+    commandName: 'system',
+    options: { getSubcommand: () => 'status' },
+    client: { ws: { ping: -1 }, isReady: () => false },
+  });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /Discord connection: not ready/);
+  assert.match(i.replies[0].content, /Gateway latency: unavailable/);
+  assert.match(i.replies[0].content, /Task executor: not configured/);
+  assert.match(i.replies[0].content, /Runtime: Node\.js/);
 });
 test('hello greets the invoking username without triggering mentions', async () => {
   const i = interaction({ commandName: 'hello', user: { username: '@everyone' } });
@@ -119,6 +134,27 @@ test('startup logs in with supplied token and never registers commands', async (
   assert.equal(await startBot({ token: 'offline-test' }, client), client);
   assert.equal(loginToken, 'offline-test');
 });
+test('shutdown is idempotent, awaits Discord teardown, and never leaks raw errors', async () => {
+  let destroyCount = 0;
+  const exitCodes = [];
+  const errors = [];
+  const handler = createShutdownHandler({ destroy: async () => { destroyCount += 1; } }, {
+    logger: { info() {}, error: (...args) => errors.push(args) },
+    onComplete: code => exitCodes.push(code),
+  });
+  await Promise.all([handler('SIGTERM'), handler('SIGINT')]);
+  assert.equal(destroyCount, 1);
+  assert.deepEqual(exitCodes, [0]);
+  assert.deepEqual(errors, []);
+});
+test('shutdown contains Discord teardown failures and reports a nonzero result', async () => {
+  const exitCodes = [];
+  const handler = createShutdownHandler({ destroy: async () => { throw new Error('secret-bearing raw failure'); } }, {
+    logger: { info() {}, error() {} }, onComplete: code => exitCodes.push(code),
+  });
+  await handler('SIGTERM');
+  assert.deepEqual(exitCodes, [1]);
+});
 test('command CLI previews safely even with inherited Discord credentials', () => {
   const result = spawnSync(process.execPath, ['scripts/register-commands.js'], {
     encoding: 'utf8', env: { ...process.env, DISCORD_BOT_TOKEN: 'must-not-be-used', DISCORD_APPLICATION_ID: '1562965805413568532' }, timeout: 5000,
@@ -126,6 +162,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'system', 'task']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });

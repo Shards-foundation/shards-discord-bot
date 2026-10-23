@@ -22,7 +22,7 @@ These checks should not require Discord credentials. Keep `.env` local and use `
 
 ## Slash commands
 
-The known commands are `/ping` and `/hello`. Preserve `/hello`'s plain-text greeting behavior with `allowedMentions: { parse: [] }` unless a reviewed requirement changes it.
+The current commands are `/ping`, `/hello`, `/system status`, and the task intake/status/cancel commands. Preserve plain-text output with `allowedMentions: { parse: [] }`. Task requests are stored as plain text, are guild- and requester-scoped, and remain queued because no executor is configured. Tests must not require Discord credentials or contact the Discord API.
 
 Command registration is potentially destructive because bulk registration replaces the selected scope. Use the offline preview first, inspect existing commands, and never register globally casually:
 
@@ -32,7 +32,7 @@ npm run commands:register -- --apply --guild GUILD_ID
 npm run commands:register -- --apply --global --confirm-global
 ```
 
-The final two commands are examples of explicitly authorized operations, not a request to run them. Do not run the live bot or make Discord changes as part of routine review.
+The final two commands are examples of explicitly authorized operations, not a request to run them. Do not run the live bot or make Discord changes as part of routine review. Do not submit real or sensitive data in task tests; use temporary test directories for task ledgers.
 
 ## Pull requests
 
