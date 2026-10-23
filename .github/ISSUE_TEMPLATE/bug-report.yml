@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible issue in the bot or its tooling.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never include bot tokens, private invite links, personal data, or other secrets in an issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the behavior and the expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: Include safe, minimal steps and relevant command names. Redact all credentials.
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Node.js version
+      placeholder: "node --version"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add sanitized logs or context. Check carefully for tokens and personal data.

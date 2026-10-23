@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a community-focused improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+      description: Describe the user need and who benefits.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed behavior
+      description: Explain the expected experience and any alternatives considered.
+    validations:
+      required: true
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Potential impact
+      options:
+        - label: This may require new Discord permissions or gateway intents.
+        - label: This may collect, store, or transmit user data.
+        - label: This may change slash-command registration or production behavior.

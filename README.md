@@ -1,80 +1,99 @@
 # Shards Discord Bot
 
-Private Discord application foundation for **Shards inc**. The application ID is `1562965805413568532`.
+A private, safety-first Discord application foundation for **Shards inc**. The current bot provides `/ping` and `/hello`, with offline tests and deliberately guarded slash-command registration.
 
-> This repository documents a new foundation built from the known command names and requirements. It is **not** a recovered original implementation, and the historical replies are not claimed to be verified exactly.
+> **Status:** foundation / development. No production deployment is configured. Startup does not register commands, and no live Discord changes are part of routine development.
 
-## Status and safety
+## At a glance
 
-- No deployment has been performed.
-- No live Discord changes have been made.
-- Startup never registers slash commands.
-- The bot uses only the `Guilds` gateway intent; no privileged intents are planned.
-- Future activation is optional and must be deliberately authorized by an operator.
-- There is no deployment workflow, embedded credential, or Docker requirement.
+| Area | Current state |
+| --- | --- |
+| Runtime | Node.js `>=24.17`, ESM, discord.js 14 |
+| Gateway intents | `Guilds` only; no privileged intents |
+| Commands | `/ping`, `/hello` |
+| Registration | Offline preview by default; explicit scope and confirmation required to write |
+| Tests | Node's built-in test runner; no Discord credentials required |
+| Secrets | Local `.env` only; never committed or logged |
+| Deployment | Not configured |
 
-Do not run the live start command until the bot has been authorized in the intended Discord environment and the token has been supplied locally.
+## Repository map
 
-## Runtime and package expectations
+```text
+src/                 Bot startup, configuration, commands, registration logic
+scripts/             Safe operator-facing command tools
+test/                Offline unit and safety-boundary tests
+.github/workflows/   CI and automated dependency maintenance
+```
 
-- Node.js **>= 24.17** (see `.nvmrc`)
-- discord.js 14
-- JavaScript ESM
-- Private package: `UNLICENSED`
+## Quick start
 
-## Installation
+Prerequisites: Node.js `>=24.17` and npm.
 
 ```sh
 npm ci
 cp .env.example .env
 ```
 
-Edit `.env` locally and set `DISCORD_BOT_TOKEN`. Keep `.env` untracked and never paste the token into source, issues, logs, or pull requests. `DISCORD_APPLICATION_ID` defaults to `1562965805413568532` and must be a numeric Discord snowflake when overridden.
+Set `DISCORD_BOT_TOKEN` in the local `.env` file only. Never commit the file, paste the token into an issue, or put it in logs. `DISCORD_APPLICATION_ID` is optional and defaults to the Shards application ID `1562965805413568532`.
+
+Do not run the live bot until the application has been deliberately authorized in the intended Discord environment and the token is supplied locally. `npm start` connects to Discord but does not register slash commands.
+
+## Development checks
+
+```sh
+npm run check
+npm test
+npm audit --omit=dev --audit-level=high
+```
+
+These checks are designed to run without credentials or Discord network access. GitHub Actions runs the syntax checks and test suite on pushes and pull requests; dependency updates are proposed by Dependabot.
 
 ## Commands
 
-| Command | Purpose | Network/mutation behavior |
-| --- | --- | --- |
-| `npm start` | Starts the bot with `node --env-file-if-exists=.env src/index.js` | Connects to Discord; authorize the app first. Startup does not register commands. |
-| `npm test` | Runs `node --test` | No secrets required. |
-| `npm run check` | Runs `node --check` over source and scripts | No secrets required. |
-| `npm run commands:preview` | Runs `node scripts/register-commands.js` | Offline preview; no secrets and no mutation. |
-| `npm run commands:register` | Runs the registration script with the local env file | Dry run by default; mutation requires explicit flags. |
+- `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
+- `/hello` — greets the invoking username as plain text. Mention parsing is disabled, so user-controlled text cannot trigger mass mentions.
 
-The planned commands are:
+The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
 
-- `/ping` replies `Pong!` and includes gateway latency.
-- `/hello` greets using the username as plain text with `allowedMentions: { parse: [] }` so it does not create mentions.
+## Slash-command registration
 
-### Slash-command registration safety
-
-Bulk registration replaces all slash commands in the selected scope. Inspect existing commands before applying changes. The registration script is a dry run by default:
+Registration uses Discord's bulk overwrite endpoint, which replaces **all** commands in the selected scope. Inspect the current scope before applying changes. Preview is offline and safe by default:
 
 ```sh
-# Preview without secrets or network mutation
 npm run commands:preview
+```
 
-# Apply to one guild only; replace GUILD_ID with the intended ID
+To deliberately apply a reviewed change to one test guild:
+
+```sh
 npm run commands:register -- --apply --guild GUILD_ID
+```
 
-# Apply globally only after deliberate review and confirmation
+A global overwrite has an additional explicit safeguard and should be rare:
+
+```sh
 npm run commands:register -- --apply --global --confirm-global
 ```
 
-Global registration can take time to propagate. Do not use `--apply` casually.
+Never run a write command casually or as part of routine CI. The registration CLI intentionally avoids printing raw Discord API errors that could contain sensitive request metadata.
 
-## Configuration
+## Configuration reference
 
-Required at runtime:
+| Variable | Required | Description |
+| --- | --- | --- |
+| `DISCORD_BOT_TOKEN` | For live startup / writes | Bot token; store locally in ignored `.env` |
+| `DISCORD_APPLICATION_ID` | No | Numeric application snowflake; defaults to `1562965805413568532` |
 
-- `DISCORD_BOT_TOKEN`: bot token; keep it only in a local, untracked `.env`.
+The checked-in `.env.example` contains no credentials. Rotate a token immediately in the Discord Developer Portal if it is exposed.
 
-Optional:
+## Operational checklist
 
-- `DISCORD_APPLICATION_ID`: numeric application snowflake; defaults to `1562965805413568532`.
+Before first use, confirm the application and target guild, grant only the permissions needed, keep the bot token outside GitHub and source control, preview command registration, and test guild-scoped changes before considering any global overwrite. There is no deployment workflow or production credential configured in this repository.
 
-The example file is intentionally safe and contains an empty token value.
+## Project status and roadmap
 
-## License
+This repository is a foundation, not a claim of feature completeness. Sensible next steps should be driven by actual community needs and reviewed for least privilege, privacy, accessibility, reliability, and maintainability. Avoid adding data collection, privileged intents, external services, or production automation without an explicit product and security decision.
 
-No permissive license has been chosen. This is a private, unpublished foundation for Shards inc and is marked `UNLICENSED` in the package metadata.
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. This is a private, unpublished project with no permissive license (`UNLICENSED`).
