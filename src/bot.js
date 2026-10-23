@@ -12,7 +12,7 @@ export function createBot(logger = console, {
     intents: [GatewayIntentBits.Guilds],
     allowedMentions: { parse: [] },
   });
-  const taskWorker = createTaskWorker({ taskStore, ollamaClient, logger, isRunning: () => client.isReady() });
+  const taskWorker = createTaskWorker({ taskStore, ollamaClient, logger });
   client.once(Events.ClientReady, ready => {
     logger.info(`Shards inc is ready (${ready.user.id}).`);
     void taskWorker.start();
