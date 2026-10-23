@@ -9,8 +9,8 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | Area | Current state |
 | --- | --- |
 | Runtime | Node.js `>=24.17`, ESM, discord.js 14 |
-| Gateway intents | `Guilds` only; no privileged intents |
-| Commands | `/ai ask`, `/ai research`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task submit`, `/task research`, `/task status`, `/task cancel`, `/task retry`, `/task events`, community utilities |
+| Gateway intents | `Guilds`, `GuildMessages`, and privileged `MessageContent`; Message Content must be enabled in the Discord Developer Portal |
+| Commands | `/ai ...`, `/thread summarize`, `/thread respond`, `/github repo`, `/system status`, `/task ...`, community utilities |
 | AI inference | Real Ollama `/api/chat` integration using configured Qwen model; no cloud AI key required |
 | Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
@@ -40,7 +40,7 @@ cp .env.example .env
 
 Set `DISCORD_BOT_TOKEN` in the local `.env` file only. Install [Ollama](https://ollama.com/download) on the host and run `ollama pull qwen3.5:4b`; the model name must match `OLLAMA_MODEL`. If using Docker Compose, the included `ollama-init` service pulls the configured model automatically. Never commit the file, paste the token into an issue, or put it in logs. `DISCORD_APPLICATION_ID` is optional and defaults to the Shards application ID `1562965805413568532`.
 
-Do not run the live bot until the application has been deliberately authorized in the intended Discord environment and the token is supplied locally. `npm start` connects to Discord but does not register slash commands.
+Do not run the live bot until the application has been deliberately authorized in the intended Discord environment and the token is supplied locally. In the Discord Developer Portal, enable **Message Content Intent** for the bot; this is required for reading message text and responding to explicit bot mentions. Invite the bot with `bot` and `applications.commands` scopes and grant `View Channels`, `Read Message History`, `Send Messages`, and `Send Messages in Threads` where it should operate. `npm start` connects to Discord but does not register slash commands.
 
 ## Development checks
 
@@ -57,7 +57,7 @@ These checks are designed to run without credentials or Discord network access. 
 
 - `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
 - `/hello` — greets the invoking username as plain text. Mention parsing is disabled, so user-controlled text cannot trigger mass mentions.
-- `/help` — lists supported commands, including the local Qwen task worker.
+- `/help` — lists supported commands, including the local Qwen task worker and thread-aware replies.
 - `/roll [sides]` — rolls a die from 2 to 1000 sides, defaulting to six.
 - `/choose options` — randomly chooses from 2–20 comma-separated options; the input is bounded and empty entries are ignored.
 - `/coinflip` — returns heads or tails.
@@ -66,7 +66,7 @@ These checks are designed to run without credentials or Discord network access. 
 - `/ai research prompt` — lets Qwen call a bounded set of read-only public GitHub tools (repository search, repository metadata, and public text-file reads) before producing a source-linked summary.
 - `/ai status` — checks API reachability and whether the configured model is installed.
 - `/ai models` — lists the models available to the configured Ollama server.
-- `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
+- `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.\n- `/thread summarize` — reads up to 20 recent messages from the current thread and privately returns a Qwen summary. `/thread respond [instruction]` — generates a contextual reply and posts it in that thread. These commands only work in threads and check the bot's channel permissions.\n- **Mention replies** — when a server member explicitly mentions the bot with a message, it reads a bounded recent history and replies using Qwen. It does not auto-reply to every message, ignores bots, suppresses mention parsing in its own output, and does not respond to a bare mention with generated content.
 - `/task submit` — stores a bounded text request in the durable queue; the background worker sends it to the configured local Qwen model when Ollama is available.
 - `/task research` — queues public GitHub research using the existing bounded, read-only Qwen tool loop. It cannot access private repositories or write to GitHub.
 - `/task status` — inspect your task; `/task cancel` — cancel queued work; `/task retry` — requeue a failed task within its three-attempt limit; `/task events` — inspect the last ten audit events for your task.
@@ -77,7 +77,7 @@ Random utilities use Node's built-in cryptographic random integer generator and 
 
 ### Ollama + Qwen
 
-The bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded prompt, and a bounded generation length. The default model is `qwen3.5:4b`; override it with `OLLAMA_MODEL` after pulling that model on the Ollama server. Ollama's API is unauthenticated by default, so bind it to localhost or a trusted private network; do not expose port 11434 directly to the public internet.
+Thread summaries, thread replies, and explicit mention replies use the same local Ollama model and bounded prompt path. Message content is sent to the configured Ollama endpoint; do not run this bot in channels whose content should not be processed.\n\nThe bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded prompt, and a bounded generation length. The default model is `qwen3.5:4b`; override it with `OLLAMA_MODEL` after pulling that model on the Ollama server. Ollama's API is unauthenticated by default, so bind it to localhost or a trusted private network; do not expose port 11434 directly to the public internet.
 
 For a host-installed Ollama server, set `OLLAMA_BASE_URL=http://127.0.0.1:11434`. When the bot runs inside Docker Compose, set it to `http://ollama:11434` (the Compose configuration already does this). Discord and Ollama must both be reachable from the bot's runtime. A model cannot run inside Discord itself; inference occurs on the machine/container hosting Ollama.
 
