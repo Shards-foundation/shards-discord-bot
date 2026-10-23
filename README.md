@@ -56,7 +56,7 @@ These checks are designed to run without credentials or Discord network access. 
 
 - `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
 - `/hello` — greets the invoking username as plain text. Mention parsing is disabled, so user-controlled text cannot trigger mass mentions.
-- `/help` — lists supported commands and clearly states that queued tasks are not executed yet.
+- `/help` — lists supported commands, including the local Qwen task worker.
 - `/roll [sides]` — rolls a die from 2 to 1000 sides, defaulting to six.
 - `/choose options` — randomly chooses from 2–20 comma-separated options; the input is bounded and empty entries are ignored.
 - `/coinflip` — returns heads or tails.
@@ -66,10 +66,10 @@ These checks are designed to run without credentials or Discord network access. 
 - `/ai status` — checks API reachability and whether the configured model is installed.
 - `/ai models` — lists the models available to the configured Ollama server.
 - `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
-- `/task submit` — stores a bounded request in the durable queue and returns its ID. It does **not** execute the request: no worker or AI provider is configured.
+- `/task submit` — stores a bounded request in the durable queue; the background worker sends it to the configured local Qwen model when Ollama is available.
 - `/task status` and `/task cancel` — privately inspect or cancel the request you submitted. Only queued tasks can be cancelled.
 
-Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. Worker integrations must be idempotent because a crash can cause a task to be retried. Use a shared transactional database before running multiple bot instances. There is no executor yet, so submitted work stays queued until one is added.
+Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. The text-only worker stores generated results or a non-sensitive failure code. A crash can cause a task to be retried; use a shared transactional database and cross-process leases before running multiple bot instances.
 
 Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing. ### Ollama + Qwen
 
@@ -77,7 +77,7 @@ The bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded
 
 For a host-installed Ollama server, set `OLLAMA_BASE_URL=http://127.0.0.1:11434`. When the bot runs inside Docker Compose, set it to `http://ollama:11434` (the Compose configuration already does this). Discord and Ollama must both be reachable from the bot's runtime. A model cannot run inside Discord itself; inference occurs on the machine/container hosting Ollama.
 
-The current `/ai` integration is text chat only. It does not yet grant Qwen tool access, run shell commands, modify repositories, browse the web, or execute queued tasks. Those capabilities require separate, permissioned tool adapters and a governed execution worker.
+The `/ai ask` command is text chat; `/ai research` adds a bounded, read-only public GitHub tool loop. The queued-task worker only generates text and has no shell, filesystem, network, or write-capable tools. Any future side-effecting tools require separate permissioned adapters, approval rules, and independent verification.
 
 The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
 
