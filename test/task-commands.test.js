@@ -82,7 +82,7 @@ test('task research queues the explicit read-only GitHub research mode', async t
   const research = taskInteraction('research', { request: 'Compare public Ollama and Qwen repositories' });
   await handleInteraction(research, { error() {} }, store);
   assert.match(research.replies[1].content, /mode: github_research/);
-  const taskId = research.replies[1].content.match(/Task ([\\w-]+) was/)[1];
+  const taskId = research.replies[1].content.match(/Task ([A-Za-z0-9-]+) was/)[1];
   const stored = await store.get(taskId, userId, { guildId });
   assert.equal(stored.mode, 'github_research');
 });
