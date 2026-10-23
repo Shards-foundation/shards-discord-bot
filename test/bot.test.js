@@ -89,7 +89,7 @@ test('help lists community commands and truthfully labels task execution', async
   assert.match(i.replies[0].content, /\/system status/);
   assert.match(i.replies[0].content, /\/choose/);
   assert.match(i.replies[0].content, /\/github repo/);
-  assert.match(i.replies[0].content, /local Qwen task execution/);
+  assert.match(i.replies[0].content, /public GitHub research using bounded read-only tools/);
 });
 test('roll uses requested sides and defaults to a six-sided die', async () => {
   const requested = interaction({ commandName: 'roll', options: { getInteger: () => 20 } });
