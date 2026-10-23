@@ -183,7 +183,7 @@ export function createOllamaClient({
       { role: 'user', content: prompt.trim() },
     ];
     let toolCallsUsed = 0;
-    for (let round = 0; round < 4; round += 1) {
+    for (let round = 0; round < 6; round += 1) {
       const data = await request('/api/chat', {
         model, stream: false, messages, tools: toolDefinitions,
         options: { temperature: 0.2, num_predict: 700 },
