@@ -61,10 +61,10 @@ These checks are designed to run without credentials or Discord network access. 
 - `/choose options` — randomly chooses from 2–20 comma-separated options; the input is bounded and empty entries are ignored.
 - `/coinflip` — returns heads or tails.
 - `/github repo repository` — looks up a public repository by `owner/name`, returning description, stars, forks, open issues and primary language. The request is fixed to GitHub's public API, uses a five-second timeout, and does not require a token.
-- \`/ai ask prompt\` — runs a real inference request against the configured Ollama model and privately returns the response.
-- \`/ai status\` — checks API reachability and whether the configured model is installed.
-- \`/ai models\` — lists the models available to the configured Ollama server.
-- \`/system status\` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
+- `/ai ask prompt` — runs a real inference request against the configured Ollama model and privately returns the response.
+- `/ai status` — checks API reachability and whether the configured model is installed.
+- `/ai models` — lists the models available to the configured Ollama server.
+- `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
 - `/task submit` — stores a bounded request in the durable queue and returns its ID. It does **not** execute the request: no worker or AI provider is configured.
 - `/task status` and `/task cancel` — privately inspect or cancel the request you submitted. Only queued tasks can be cancelled.
 
@@ -72,13 +72,13 @@ Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/
 
 Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing. ### Ollama + Qwen
 
-The bot calls Ollama's \`POST /api/chat\` endpoint with \`stream: false\`, a bounded prompt, and a bounded generation length. The default model is \`qwen3.5:4b\`; override it with \`OLLAMA_MODEL\` after pulling that model on the Ollama server. Ollama's API is unauthenticated by default, so bind it to localhost or a trusted private network; do not expose port 11434 directly to the public internet.
+The bot calls Ollama's `POST /api/chat` endpoint with `stream: false`, a bounded prompt, and a bounded generation length. The default model is `qwen3.5:4b`; override it with `OLLAMA_MODEL` after pulling that model on the Ollama server. Ollama's API is unauthenticated by default, so bind it to localhost or a trusted private network; do not expose port 11434 directly to the public internet.
 
-For a host-installed Ollama server, set \`OLLAMA_BASE_URL=http://127.0.0.1:11434\`. When the bot runs inside Docker Compose, set it to \`http://ollama:11434\` (the Compose configuration already does this). Discord and Ollama must both be reachable from the bot's runtime. A model cannot run inside Discord itself; inference occurs on the machine/container hosting Ollama.
+For a host-installed Ollama server, set `OLLAMA_BASE_URL=http://127.0.0.1:11434`. When the bot runs inside Docker Compose, set it to `http://ollama:11434` (the Compose configuration already does this). Discord and Ollama must both be reachable from the bot's runtime. A model cannot run inside Discord itself; inference occurs on the machine/container hosting Ollama.
 
-The current \`/ai\` integration is text chat only. It does not yet grant Qwen tool access, run shell commands, modify repositories, browse the web, or execute queued tasks. Those capabilities require separate, permissioned tool adapters and a governed execution worker.
+The current `/ai` integration is text chat only. It does not yet grant Qwen tool access, run shell commands, modify repositories, browse the web, or execute queued tasks. Those capabilities require separate, permissioned tool adapters and a governed execution worker.
 
-The bot uses the minimum \`Guilds\` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
+The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
 
 ## Slash-command registration
 
