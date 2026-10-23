@@ -1,6 +1,6 @@
 # Shards Discord Bot
 
-A private, safety-first Discord application foundation for **Shards inc**. The bot provides basic utility commands, truthful runtime status, a durable task-intake lifecycle, offline tests, and deliberately guarded slash-command registration.
+A private, safety-first Discord application foundation for **Shards inc**. The bot provides utility commands, local Ollama/Qwen inference, read-only public GitHub research, a durable task queue with a background Qwen worker, offline tests, and deliberately guarded slash-command registration.
 
 > **Status:** foundation / development. No production deployment is configured. Startup does not register commands, and no live Discord changes are part of routine development.
 
@@ -12,7 +12,7 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | Gateway intents | `Guilds` only; no privileged intents |
 | Commands | `/ai ask`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task submit`, `/task status`, `/task cancel`, community utilities |
 | AI inference | Real Ollama `/api/chat` integration using configured Qwen model; no cloud AI key required |
-| Task execution | Durable intake ledger; agentic tool execution is not yet enabled |
+| Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
 | Tests | Node's built-in test runner; no Discord credentials required |
 | Secrets | Local `.env` only; never committed or logged |
@@ -124,3 +124,10 @@ This repository is a foundation, not a claim of feature completeness. Sensible n
 ## Contributing and security
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. The [Terms of Service](TERMS_OF_SERVICE.md) and [Privacy Policy](PRIVACY_POLICY.md) are **drafts only**: complete their legal-entity, contact, jurisdiction, effective-date, deployment, and retention details and obtain legal review before publishing or relying on them. The project is licensed under MIT. The GitHub repository must be made public by an authorised maintainer before it is publicly discoverable as an open-source repository.
+
+
+## Task worker execution boundary
+
+The background worker claims queued tasks from the durable ledger, submits the request to the configured Ollama model, and stores the result for the requester to retrieve with `/task status`. Task transitions and worker outcomes are recorded in the task event ledger. The worker is deliberately **text-only**: it has no shell, filesystem, network, GitHub write, or Discord message-send tools. It must not claim to have performed external actions. Requests that require real-world changes receive guidance or a blocker instead of an unverified success claim.
+
+The current JSON ledger is designed for one bot process and one persistent data volume. Do not scale to multiple replicas or shared workers until the ledger is replaced with a transactional shared database and cross-process leases. Ollama failures mark a task failed with a non-sensitive failure code; inspect the bot logs and retry by submitting a new request after restoring the model service.
