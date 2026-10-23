@@ -138,6 +138,7 @@ const HELP_TEXT = [
   '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
+  '`/github repo owner/name` — public GitHub repository metadata',
   '`/help` — this command list',
 ].join('\n');
 
@@ -166,7 +167,7 @@ export async function lookupPublicRepository(repository, fetchImpl = fetch) {
     }
     const language = typeof data.language === 'string' ? data.language : 'Not specified';
     const description = typeof data.description === 'string' && data.description.trim()
-      ? data.description.trim().replace(/[\\r\\n\\t]/g, ' ').slice(0, 180)
+      ? data.description.trim().replace(/[\\r\\n\\t]/g, ' ').replace(/[*_~|<>]/g, '').replaceAll('`', '').slice(0, 180)
       : 'No description provided.';
     return {
       ok: true,
