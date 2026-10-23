@@ -227,7 +227,7 @@ const HELP_TEXT = [
   '`/ping` — gateway latency check',
   '`/hello` — greeting',
   '`/system status` — runtime and connection status',
-  '`/task submit`, `/task status`, `/task cancel`, `/task retry`, `/task events` — durable Qwen task lifecycle and audit history',
+  '`/task submit`, `/task status`, `/task cancel`, `/task retry`, `/task events` — durable queue, local Qwen task execution, retries, and audit history',
   '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
