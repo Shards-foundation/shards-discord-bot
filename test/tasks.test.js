@@ -107,6 +107,21 @@ test('task inputs and results are bounded and invalid identities are rejected', 
   assert.equal(failed.result, null);
 });
 
+test('failed tasks can be retried within the attempt limit and audit events are guild-scoped', async t => {
+  const { store } = await withStore(t);
+  const task = await store.submit({ requesterId, guildId, request: 'Retry this task', idempotencyKey: 'request-0010' });
+  await store.claimNext('worker-retry');
+  const failed = await store.finish(task.id, 'worker-retry', { failureCode: 'OLLAMA_EXECUTION_FAILED' });
+  assert.equal(failed.state, 'failed');
+  const queued = await store.retry(task.id, requesterId, { guildId });
+  assert.equal(queued.state, 'queued');
+  assert.equal(queued.failureCode, null);
+  const events = await store.events(task.id, requesterId, { guildId });
+  assert.deepEqual(events.map(event => event.action), ['submitted', 'claimed', 'failed', 'retry_requested']);
+  assert.equal(await store.events(task.id, requesterId, { guildId: '423456789012345678' }), null);
+  await assert.rejects(store.retry(task.id, otherUserId, { guildId }), /Not authorised/);
+});
+
 test('corrupt task data fails closed instead of silently overwriting it', async t => {
   const { filePath, store } = await withStore(t);
   await mkdir(dirname(filePath), { recursive: true });
