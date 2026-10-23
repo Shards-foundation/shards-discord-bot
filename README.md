@@ -48,6 +48,7 @@ Do not run the live bot until the application has been deliberately authorized i
 npm run check
 npm test
 npm audit --omit=dev --audit-level=high
+npm run smoke:ollama # live check; requires a running Ollama server and installed model
 ```
 
 These checks are designed to run without credentials or Discord network access. GitHub Actions runs the syntax checks and test suite on pushes and pull requests; dependency updates are proposed by Dependabot.
@@ -132,3 +133,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md
 The background worker claims queued tasks from the durable ledger, submits the request to the configured Ollama model, and stores the result for the requester to retrieve with `/task status`. Task transitions and worker outcomes are recorded in the task event ledger. The worker is deliberately **text-only**: it has no shell, filesystem, network, GitHub write, or Discord message-send tools. It must not claim to have performed external actions. Requests that require real-world changes receive guidance or a blocker instead of an unverified success claim.
 
 The current JSON ledger is designed for one bot process and one persistent data volume. Do not scale to multiple replicas or shared workers until the ledger is replaced with a transactional shared database and cross-process leases. Ollama failures mark a task failed with a non-sensitive failure code; inspect the bot logs and retry by submitting a new request after restoring the model service.
+
+
+## Live inference verification
+
+Run `npm run smoke:ollama` from the bot host/container after configuring `OLLAMA_BASE_URL` and `OLLAMA_MODEL`. This checks the live Ollama API, confirms the configured model is installed, and performs a real inference request. It does not connect to Discord or register commands. The CI suite uses mocked responses and cannot replace this runtime smoke check. Do not expose Ollama's unauthenticated API directly to the public internet.
