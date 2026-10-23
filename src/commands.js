@@ -288,6 +288,9 @@ export async function handleInteraction(interaction, logger = console, taskStore
       if (!taskStore) throw new Error('Task store is unavailable.');
       await handleTaskCommand(interaction, taskStore);
       return;
+    } else if (interaction.commandName === 'ai') {
+      await handleAICommand(interaction, ollamaClient);
+      return;
     } else if (interaction.options.getSubcommand() === 'status') {
       content = formatStatus(interaction.client);
     } else {
