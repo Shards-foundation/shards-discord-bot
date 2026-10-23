@@ -52,7 +52,7 @@ test('registration payload exposes the full supported command set', () => {
   assert.equal(commands.find(c => c.name === 'choose').options[0].max_length, 500);
   assert.equal(commands.find(c => c.name === 'github').options[0].name, 'repo');
   assert.equal(commands.find(c => c.name === 'system').options[0].name, 'status');
-  assert.deepEqual(commands.find(c => c.name === 'task').options.map(option => option.name), ['submit', 'status', 'retry', 'events', 'cancel']);
+  assert.deepEqual(commands.find(c => c.name === 'task').options.map(option => option.name), ['submit', 'research', 'status', 'retry', 'events', 'cancel']);
 });
 test('ping replies with gateway latency and suppresses mentions', async () => {
   const i = interaction();
