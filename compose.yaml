@@ -20,9 +20,9 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: \${OLLAMA_MODEL:-qwen3.5:4b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
     entrypoint: ["/bin/sh", "-lc"]
-    command: ["ollama pull \"$$\{OLLAMA_MODEL}\""]
+    command: ["ollama pull \"$OLLAMA_MODEL\""]
     restart: "no"
 
   bot:
@@ -31,11 +31,11 @@ services:
     env_file:
       - .env
     environment:
-      DISCORD_BOT_TOKEN: \${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN in .env}
-      DISCORD_APPLICATION_ID: \${DISCORD_APPLICATION_ID:-1562965805413568532}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN in .env}
+      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:-1562965805413568532}
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: \${OLLAMA_MODEL:-qwen3.5:4b}
-      OLLAMA_TIMEOUT_MS: \${OLLAMA_TIMEOUT_MS:-120000}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-120000}
       SHARDS_TASK_STORE_PATH: /data/tasks.json
     volumes:
       - bot_data:/data
