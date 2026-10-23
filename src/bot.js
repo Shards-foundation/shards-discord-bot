@@ -3,13 +3,14 @@ import { handleInteraction } from './commands.js';
 import { createTaskStore } from './tasks.js';
 import { createOllamaClient } from './ollama.js';
 import { createTaskWorker } from './task-worker.js';
+import { handleMentionMessage } from './thread-context.js';
 
 export function createBot(logger = console, {
   taskStore = createTaskStore({ filePath: process.env.SHARDS_TASK_STORE_PATH || '.data/tasks.json' }),
   ollamaClient = createOllamaClient(),
 } = {}) {
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
     allowedMentions: { parse: [] },
   });
   const taskWorker = createTaskWorker({ taskStore, ollamaClient, logger });
@@ -18,6 +19,9 @@ export function createBot(logger = console, {
     void taskWorker.start();
   });
   client.once(Events.ClientReady, () => { client.taskWorker = taskWorker; });
+  client.on(Events.MessageCreate, message => {
+    void handleMentionMessage(message, client, ollamaClient, logger).catch(() => logger.error('Mention reply failed.'));
+  });
   client.on(Events.InteractionCreate, interaction => {
     void handleInteraction(interaction, logger, taskStore, fetch, ollamaClient).catch(() => logger.error('Interaction processing failed.'));
   });
