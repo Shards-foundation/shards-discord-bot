@@ -48,6 +48,19 @@ export const commands = [
       },
       {
         type: ApplicationCommandOptionType.Subcommand,
+        name: 'research',
+        description: 'Use Qwen with bounded read-only public GitHub tools.',
+        options: [{
+          type: ApplicationCommandOptionType.String,
+          name: 'prompt',
+          description: 'What should Shards AI research on public GitHub?',
+          required: true,
+          min_length: 2,
+          max_length: 3000,
+        }],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
         name: 'status',
         description: 'Check Ollama connectivity and whether the configured model is installed.',
       },
@@ -131,11 +144,11 @@ async function handleAICommand(interaction, ollamaClient) {
   const subcommand = interaction.options.getSubcommand();
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   let content;
-  if (subcommand === 'ask') {
+  if (subcommand === 'ask' || subcommand === 'research') {
     const prompt = interaction.options.getString('prompt', true);
-    const answer = await ollamaClient.chat(prompt);
+    const answer = subcommand === 'research' ? await ollamaClient.research(prompt) : await ollamaClient.chat(prompt);
     const responseText = answer.content.length > 1_750 ? answer.content.slice(0, 1_730) + '\n\n[Response truncated for Discord.]' : answer.content;
-    const seconds = answer.totalDurationNs === null ? 'unknown' : (answer.totalDurationNs / 1e9).toFixed(1) + 's';
+    const seconds = answer.totalDurationNs == null ? 'research tools: ' + (answer.toolCallsUsed ?? 0) : (answer.totalDurationNs / 1e9).toFixed(1) + 's';
     content = '**Shards AI · ' + answer.model + ' · ' + seconds + '**\n' + responseText;
   } else {
     const models = await ollamaClient.listModels();
@@ -202,6 +215,7 @@ const HELP_TEXT = [
   '`/coinflip` — heads or tails',
   '`/github repo owner/name` — public GitHub repository metadata',
   '`/ai ask prompt` — send a prompt to the configured Qwen model through Ollama',
+  '`/ai research prompt` — Qwen-assisted, read-only public GitHub research with a bounded tool loop',
   '`/ai status` and `/ai models` — check Ollama and installed models',
   '`/help` — this command list',
 ].join('\n');

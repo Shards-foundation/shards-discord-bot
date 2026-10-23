@@ -177,6 +177,18 @@ test('AI ask invokes the configured Ollama client and returns its answer private
   assert.match(i.replies[0].content, /qwen3\.5:4b/);
   assert.deepEqual(i.replies[0].allowedMentions, { parse: [] });
 });
+test('AI research invokes the read-only research capability and labels tool usage', async () => {
+  const i = interaction({ commandName: 'ai', options: { getSubcommand: () => 'research', getString: () => 'Find Qwen repositories.' } });
+  const client = {
+    model: 'qwen3.5:4b',
+    chat: async () => { throw new Error('chat must not be called for research'); },
+    research: async prompt => ({ model: 'qwen3.5:4b', content: 'Found public repositories with source URLs.', toolCallsUsed: 2 }),
+    listModels: async () => [],
+  };
+  await handleInteraction(i, { error() {} }, undefined, fetch, client);
+  assert.match(i.replies[0].content, /Found public repositories/);
+  assert.match(i.replies[0].content, /research tools: 2/);
+});
 test('AI status and models query the configured Ollama endpoint', async () => {
   const client = {
     model: 'qwen3.5:4b',
