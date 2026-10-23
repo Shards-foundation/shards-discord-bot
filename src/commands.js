@@ -112,6 +112,18 @@ export const commands = [
       },
       {
         type: ApplicationCommandOptionType.Subcommand,
+        name: 'retry',
+        description: 'Requeue a failed task within its attempt limit.',
+        options: [{ type: ApplicationCommandOptionType.String, name: 'task_id', description: 'ID returned by /task submit.', required: true }],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: 'events',
+        description: 'View the audit history for your task.',
+        options: [{ type: ApplicationCommandOptionType.String, name: 'task_id', description: 'ID returned by /task submit.', required: true }],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
         name: 'cancel',
         description: 'Cancel a task that is still queued.',
         options: [{
@@ -197,6 +209,12 @@ async function handleTaskCommand(interaction, taskStore) {
     } else if (subcommand === 'cancel') {
       const task = await taskStore.cancel(taskId, interaction.user.id, { guildId: interaction.guildId });
       content = task ? `Task ${task.id} cancelled.` : 'Task not found or you are not authorised to cancel it.';
+    } else if (subcommand === 'retry') {
+      const task = await taskStore.retry(taskId, interaction.user.id, { guildId: interaction.guildId });
+      content = task ? 'Task ' + task.id + ' requeued (status: ' + task.state + ', attempts used: ' + task.attempts + ').' : 'Task not found or you are not authorised to retry it.';
+    } else if (subcommand === 'events') {
+      const events = await taskStore.events(taskId, interaction.user.id, { guildId: interaction.guildId });
+      content = events ? (events.length ? '**Task audit history (' + events.length + ')**\n' + events.slice(-10).map(event => '• ' + event.at + ' — ' + event.action).join('\n') : 'No audit events recorded.') : 'Task not found or you are not authorised to view its audit history.';
     } else {
       content = 'Unsupported task operation.';
     }
@@ -209,7 +227,7 @@ const HELP_TEXT = [
   '`/ping` — gateway latency check',
   '`/hello` — greeting',
   '`/system status` — runtime and connection status',
-  '`/task submit`, `/task status`, `/task cancel` — durable queue with local Qwen task execution',
+  '`/task submit`, `/task status`, `/task cancel`, `/task retry`, `/task events` — durable queue, local Qwen task execution, retries, and audit history',
   '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
