@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { createOllamaClient } from './ollama.js';
+import { readRecentMessages, makeThreadPrompt, postBoundedReply } from './thread-context.js';
 import { ApplicationCommandOptionType, ApplicationCommandType, MessageFlags } from 'discord.js';
 
 export const commands = [
@@ -69,6 +70,17 @@ export const commands = [
         name: 'models',
         description: 'List locally available Ollama models.',
       },
+    ],
+  },
+  {
+    name: 'thread',
+    description: 'Read and respond to recent messages in the current thread.',
+    type: ApplicationCommandType.ChatInput,
+    options: [
+      { type: ApplicationCommandOptionType.Subcommand, name: 'summarize', description: 'Summarize the recent conversation in this thread.' },
+      { type: ApplicationCommandOptionType.Subcommand, name: 'respond', description: 'Generate and post a useful reply in this thread.', options: [
+        { type: ApplicationCommandOptionType.String, name: 'instruction', description: 'Optional direction for the reply.', required: false, max_length: 500 }
+      ] },
     ],
   },
   {
@@ -234,6 +246,7 @@ const HELP_TEXT = [
   '`/ping` — gateway latency check',
   '`/hello` — greeting',
   '`/system status` — runtime and connection status',
+  '`/thread summarize` — summarize recent messages in the current thread; `/thread respond` — generate and post a contextual reply (explicitly invoked, never automatic in every channel)',
   '`/task submit` — queue a Qwen text task; `/task research` — queue public GitHub research using bounded read-only tools; `/task status`, `/task cancel`, `/task retry`, `/task events` — lifecycle, retries, and audit history',
   '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
   '`/choose options` — randomly select from 2–20 comma-separated options',
@@ -293,9 +306,38 @@ function chooseOption(raw) {
   return { value: options[randomInt(options.length)] };
 }
 
+async function handleThreadCommand(interaction, ollamaClient) {
+  if (!interaction.guildId || !interaction.channel?.isThread?.()) {
+    await interaction.reply({ content: 'Use /thread inside a server thread. The bot needs View Channel, Read Message History, and Send Messages in Threads permissions.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const permissions = interaction.channel.permissionsFor(interaction.client.user);
+  if (!permissions?.has(['ViewChannel', 'ReadMessageHistory', 'SendMessagesInThreads'])) {
+    await interaction.reply({ content: 'I am missing one or more required thread permissions: View Channel, Read Message History, Send Messages in Threads.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const recent = await readRecentMessages(interaction.channel);
+  if (!recent.length) {
+    await interaction.editReply({ content: 'There are no readable messages in this thread yet.' });
+    return;
+  }
+  const mode = interaction.options.getSubcommand();
+  const instruction = mode === 'respond' ? (interaction.options.getString('instruction') ?? 'Answer the conversation naturally and helpfully.') : 'Summarize the key points, decisions, open questions, and next actions.';
+  const prompt = makeThreadPrompt(recent, instruction, mode);
+  const answer = await ollamaClient.chat(prompt);
+  const text = answer.content.trim().slice(0, 1_800);
+  if (mode === 'summarize') {
+    await interaction.editReply({ content: ('**Thread summary · ' + answer.model + '**\n' + text).slice(0, 1_950), allowedMentions: { parse: [] } });
+  } else {
+    await postBoundedReply(interaction.channel, text);
+    await interaction.editReply({ content: 'Posted a reply in this thread using the recent conversation as context. Model: ' + answer.model, allowedMentions: { parse: [] } });
+  }
+}
+
 export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient()) {
   if (!interaction.isChatInputCommand()) return;
-  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task'].includes(interaction.commandName);
+  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task', 'thread'].includes(interaction.commandName);
   if (!supported) return;
   try {
     let content;
@@ -322,6 +364,9 @@ export async function handleInteraction(interaction, logger = console, taskStore
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await lookupPublicRepository(interaction.options.getString('repository', true), fetchImpl);
       await interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
+      return;
+    } else if (interaction.commandName === 'thread') {
+      await handleThreadCommand(interaction, ollamaClient);
       return;
     } else if (interaction.commandName === 'task') {
       if (!taskStore) throw new Error('Task store is unavailable.');
