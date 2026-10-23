@@ -64,7 +64,7 @@ test('research uses Qwen tool calls to search public GitHub and returns the fina
   const client = createOllamaClient({
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      if (url === 'https://api.github.com/search/repositories?q=qwen+ollama&per_page=5') {
+      if (url === 'https://api.github.com/search/repositories?q=qwen%20ollama&per_page=5') {
         return response(200, { items: [{ full_name: 'ollama/ollama', description: 'Run models locally', html_url: 'https://github.com/ollama/ollama', stargazers_count: 100, language: 'Go' }] });
       }
       if (url === 'http://127.0.0.1:11434/api/chat') {
@@ -80,7 +80,7 @@ test('research uses Qwen tool calls to search public GitHub and returns the fina
   const result = await client.research('Research Ollama and Qwen.');
   assert.match(result.content, /Source: https:\/\/github.com\/ollama\/ollama/);
   assert.equal(result.toolCallsUsed, 1);
-  assert.equal(requests.filter(r => r.url === 'https://api.github.com/search/repositories?q=qwen+ollama&per_page=5').length, 1);
+  assert.equal(requests.filter(r => r.url === 'https://api.github.com/search/repositories?q=qwen%20ollama&per_page=5').length, 1);
 });
 
 test('research tool path validation rejects traversal and secret-like files', async () => {
