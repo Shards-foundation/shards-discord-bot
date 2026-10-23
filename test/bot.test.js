@@ -13,6 +13,7 @@ function interaction(overrides = {}) {
   const replies = [];
   return { isChatInputCommand: () => true, commandName: 'ping',
     client: { ws: { ping: 42 } }, user: { username: 'Alice' },
+    options: { getInteger: () => null, getString: () => '', getSubcommand: () => 'status' },
     deferred: false, replied: false, replies,
     reply: async (payload) => { replies.push(payload); },
     followUp: async (payload) => { replies.push(payload); }, ...overrides };
@@ -33,11 +34,14 @@ test('preview config needs no token but rejects invalid IDs', () => {
 });
 test('registration payload exposes exactly the two supported chat commands', () => {
   assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
+    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
   ]);
   for (const command of commands) assert.ok(command.description.length > 0);
-  assert.equal(commands[2].options[0].name, 'status');
-  assert.deepEqual(commands[3].options.map(option => option.name), ['submit', 'status', 'cancel']);
+  assert.equal(commands.find(c => c.name === 'roll').options[0].min_value, 2);
+  assert.equal(commands.find(c => c.name === 'roll').options[0].max_value, 1000);
+  assert.equal(commands.find(c => c.name === 'choose').options[0].max_length, 500);
+  assert.equal(commands.find(c => c.name === 'system').options[0].name, 'status');
+  assert.deepEqual(commands.find(c => c.name === 'task').options.map(option => option.name), ['submit', 'status', 'cancel']);
 });
 test('ping replies with gateway latency and suppresses mentions', async () => {
   const i = interaction();
@@ -67,6 +71,35 @@ test('hello greets the invoking username without triggering mentions', async () 
   await handleInteraction(i);
   assert.match(i.replies[0].content, /Hello, @everyone/);
   assert.deepEqual(i.replies[0].allowedMentions, { parse: [] });
+});
+test('help lists community commands and truthfully labels task execution', async () => {
+  const i = interaction({ commandName: 'help' });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /\/system status/);
+  assert.match(i.replies[0].content, /\/choose/);
+  assert.match(i.replies[0].content, /no executor configured/);
+});
+test('roll uses requested sides and defaults to a six-sided die', async () => {
+  const requested = interaction({ commandName: 'roll', options: { getInteger: () => 20 } });
+  await handleInteraction(requested);
+  assert.match(requested.replies[0].content, /on a d20/);
+  const defaulted = interaction({ commandName: 'roll' });
+  await handleInteraction(defaulted);
+  assert.match(defaulted.replies[0].content, /on a d6/);
+});
+test('choose selects only supplied options and rejects invalid option counts', async () => {
+  const i = interaction({ commandName: 'choose', options: { getString: () => ' alpha, beta, gamma ' } });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /I choose: \*\*(alpha|beta|gamma)\*\*/);
+  const invalid = interaction({ commandName: 'choose', options: { getString: () => 'only one' } });
+  await handleInteraction(invalid);
+  assert.match(invalid.replies[0].content, /between 2 and 20/);
+  assert.deepEqual(i.replies[0].allowedMentions, { parse: [] });
+});
+test('coinflip returns only heads or tails', async () => {
+  const i = interaction({ commandName: 'coinflip' });
+  await handleInteraction(i);
+  assert.match(i.replies[0].content, /Heads|Tails/);
 });
 test('non-chat interactions and unknown commands are ignored', async () => {
   for (const i of [interaction({ isChatInputCommand: () => false }), interaction({ commandName: 'missing' })]) {
@@ -162,6 +195,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'system', 'task']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'system', 'task']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });

@@ -1,8 +1,15 @@
+import { randomInt } from 'node:crypto';
 import { ApplicationCommandOptionType, ApplicationCommandType, MessageFlags } from 'discord.js';
 
 export const commands = [
   { name: 'ping', description: 'Check bot responsiveness and gateway latency.', type: ApplicationCommandType.ChatInput },
   { name: 'hello', description: 'Get a friendly greeting from Shards inc.', type: ApplicationCommandType.ChatInput },
+  { name: 'help', description: 'Show available Shards bot commands.', type: ApplicationCommandType.ChatInput },
+  { name: 'roll', description: 'Roll a fair die with the chosen number of sides.', type: ApplicationCommandType.ChatInput,
+    options: [{ type: ApplicationCommandOptionType.Integer, name: 'sides', description: 'Number of sides (2–1000).', required: false, min_value: 2, max_value: 1000 }] },
+  { name: 'choose', description: 'Choose one option at random from a comma-separated list.', type: ApplicationCommandType.ChatInput,
+    options: [{ type: ApplicationCommandOptionType.String, name: 'options', description: 'Enter 2–20 options separated by commas.', required: true, max_length: 500 }] },
+  { name: 'coinflip', description: 'Flip a fair coin.', type: ApplicationCommandType.ChatInput },
   {
     name: 'system',
     description: 'Inspect bot runtime status.',
@@ -105,9 +112,27 @@ async function handleTaskCommand(interaction, taskStore) {
   await interaction.editReply({ content, allowedMentions: { parse: [] } });
 }
 
+const HELP_TEXT = [
+  '**Shards bot commands**',
+  '`/ping` — gateway latency check',
+  '`/hello` — greeting',
+  '`/system status` — runtime and connection status',
+  '`/task submit`, `/task status`, `/task cancel` — durable task intake and tracking (no executor configured)',
+  '`/roll [sides]` — roll a die (2–1000 sides; defaults to 6)',
+  '`/choose options` — randomly select from 2–20 comma-separated options',
+  '`/coinflip` — heads or tails',
+  '`/help` — this command list',
+].join('\n');
+
+function chooseOption(raw) {
+  const options = raw.split(',').map(option => option.trim()).filter(Boolean);
+  if (options.length < 2 || options.length > 20) return { error: 'Provide between 2 and 20 non-empty options, separated by commas.' };
+  return { value: options[randomInt(options.length)] };
+}
+
 export async function handleInteraction(interaction, logger = console, taskStore) {
   if (!interaction.isChatInputCommand()) return;
-  const supported = ['ping', 'hello', 'system', 'task'].includes(interaction.commandName);
+  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'system', 'task'].includes(interaction.commandName);
   if (!supported) return;
   try {
     let content;
@@ -117,6 +142,18 @@ export async function handleInteraction(interaction, logger = console, taskStore
       content = `Pong! Gateway latency: ${latency}.`;
     } else if (interaction.commandName === 'hello') {
       content = `Hello, ${interaction.user.username}! Welcome to Shards inc.`;
+    } else if (interaction.commandName === 'help') {
+      content = HELP_TEXT;
+    } else if (interaction.commandName === 'roll') {
+      const sides = interaction.options.getInteger('sides') ?? 6;
+      content = !Number.isInteger(sides) || sides < 2 || sides > 1000
+        ? 'Choose a die with between 2 and 1000 sides.'
+        : `🎲 You rolled **${randomInt(1, sides + 1)}** on a d${sides}.`;
+    } else if (interaction.commandName === 'choose') {
+      const result = chooseOption(interaction.options.getString('options') ?? '');
+      content = result.error ?? `I choose: **${result.value}**`;
+    } else if (interaction.commandName === 'coinflip') {
+      content = randomInt(2) === 0 ? '🪙 Heads.' : '🪙 Tails.';
     } else if (interaction.commandName === 'task') {
       if (!taskStore) throw new Error('Task store is unavailable.');
       await handleTaskCommand(interaction, taskStore);

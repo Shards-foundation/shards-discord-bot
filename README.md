@@ -10,7 +10,7 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | --- | --- |
 | Runtime | Node.js `>=24.17`, ESM, discord.js 14 |
 | Gateway intents | `Guilds` only; no privileged intents |
-| Commands | `/ping`, `/hello`, `/system status`, `/task submit`, `/task status`, `/task cancel` |
+| Commands | `/ping`, `/hello`, `/help`, `/roll`, `/choose`, `/coinflip`, `/system status`, `/task submit`, `/task status`, `/task cancel` |
 | Task execution | Durable intake and lifecycle ledger; **no worker/executor is configured**, so requests remain queued |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
 | Tests | Node's built-in test runner; no Discord credentials required |
@@ -54,13 +54,17 @@ These checks are designed to run without credentials or Discord network access. 
 
 - `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
 - `/hello` — greets the invoking username as plain text. Mention parsing is disabled, so user-controlled text cannot trigger mass mentions.
+- `/help` — lists supported commands and clearly states that queued tasks are not executed yet.
+- `/roll [sides]` — rolls a die from 2 to 1000 sides, defaulting to six.
+- `/choose options` — randomly chooses from 2–20 comma-separated options; the input is bounded and empty entries are ignored.
+- `/coinflip` — returns heads or tails.
 - `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
 - `/task submit` — stores a bounded request in the durable queue and returns its ID. It does **not** execute the request: no worker or AI provider is configured.
 - `/task status` and `/task cancel` — privately inspect or cancel the request you submitted. Only queued tasks can be cancelled.
 
 Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. Worker integrations must be idempotent because a crash can cause a task to be retried. Use a shared transactional database before running multiple bot instances. There is no executor yet, so submitted work stays queued until one is added.
 
-The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
+Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. All command replies disable automatic mention parsing. The bot uses the minimum `Guilds` intent. Do not add privileged intents, permissions, or command behavior without reviewing the security and privacy implications.
 
 ## Slash-command registration
 
