@@ -266,9 +266,9 @@ test('preview never calls REST and writes preserve the selected scope', async ()
   await registerCommands(rest, '1562965805413568532', registrationPlan(['--apply', '--global', '--confirm-global']));
   assert.equal(calls[1].route, '/applications/1562965805413568532/commands');
 });
-test('client uses only the Guilds intent and never permits mentions', () => {
+test('client requests message events for explicit mention replies and never permits mentions', () => {
   const client = createBot({ info() {}, error() {} });
-  assert.deepEqual(client.options.intents.toArray(), ['Guilds']);
+  assert.deepEqual(client.options.intents.toArray(), ['Guilds', 'GuildMessages', 'MessageContent']);
   assert.equal(client.options.intents.has(GatewayIntentBits.MessageContent), false);
   assert.deepEqual(client.options.allowedMentions.parse, []);
   assert.equal(client.listenerCount(Events.InteractionCreate), 1);
@@ -308,6 +308,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'thread', 'system', 'task']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });
