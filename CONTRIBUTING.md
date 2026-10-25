@@ -1,9 +1,8 @@
 # Contributing
 
-This private repository is a foundation for Shards inc's Discord application. Keep changes small, reviewable, and safe to run offline.
+This repository is a foundation for Shards inc's Discord application. Keep changes small, reviewable, and safe to run offline.
 
 ## Before you change anything
-
 1. Use Node.js `>=24.17` and install dependencies with `npm ci`.
 2. Read the README and check whether a change can affect Discord permissions, intents, or slash-command registration.
 3. Never add tokens, credentials, copied production payloads, or private invite links to the repository.
