@@ -22,7 +22,7 @@ These checks should not require Discord credentials. Keep `.env` local and use `
 
 ## Slash commands
 
-The current commands are `/ping`, `/hello`, `/system status`, and the task intake/status/cancel commands. Preserve plain-text output with `allowedMentions: { parse: [] }`. Task requests are stored as plain text, are guild- and requester-scoped, and remain queued because no executor is configured. Tests must not require Discord credentials or contact the Discord API.
+The current commands include local-model `/ai` chat/research, public-only `/github repo`, task lifecycle commands, `/usage summary`, and `/audit task`. Preserve private responses for user/task/usage records, plain-text output, and `allowedMentions: { parse: [] }`. Task requests/results are stored as plain text and are requester- and guild-scoped. The model worker has no external side-effect tools. Usage records contain metadata only and must not contain prompts or generated text. Tests must not require Discord credentials or contact the Discord API.
 
 Command registration is potentially destructive because bulk registration replaces the selected scope. Use the offline preview first, inspect existing commands, and never register globally casually:
 
@@ -32,7 +32,7 @@ npm run commands:register -- --apply --guild GUILD_ID
 npm run commands:register -- --apply --global --confirm-global
 ```
 
-The final two commands are examples of explicitly authorized operations, not a request to run them. Do not run the live bot or make Discord changes as part of routine review. Do not submit real or sensitive data in task tests; use temporary test directories for task ledgers.
+The final two commands are examples of explicitly authorized operations, not a request to run them. Do not run the live bot or make Discord changes as part of routine review. Do not submit real or sensitive data in tests; use temporary directories for task and usage ledgers. Approval/admin capabilities and policy-decision audit records are not implemented; do not present placeholders as working security controls.
 
 ## Pull requests
 
@@ -43,4 +43,4 @@ Include:
 - Any Discord permission, intent, or registration implications.
 - Confirmation that no secrets or live Discord changes are included.
 
-Avoid unrelated formatting churn. There is currently no permissive license; the package is private and `UNLICENSED`.
+Avoid unrelated formatting churn. The repository is licensed under MIT; preserve the license notice in redistributed copies.

@@ -5,7 +5,7 @@
 
 # Dependencies
 node_modules/
-# Local durable task ledger; production deployments must use persistent storage.
+# Local durable task and usage ledgers; production deployments must use persistent storage.
 .data/
 
 # Test and coverage output

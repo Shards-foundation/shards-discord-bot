@@ -20,9 +20,9 @@ If you install, configure, or administer the Bot for a Discord server, you repre
 
 ## 3. What the Service does—and does not do
 
-The current Bot supports `/ping`, `/hello`, `/system status`, `/task submit`, `/task status`, and `/task cancel`. It uses Discord’s Guilds gateway intent and does not intentionally collect channel message history. The `/task submit` command stores the request text and returns a task identifier. **There is currently no task executor, AI model, research worker, or automation configured. A submitted request is queued for record-keeping and is not performed.** Do not rely on a queued task being reviewed, completed, or acted upon.
+The current Bot supports utility commands, `/ai ask`, `/ai research`, `/github repo`, `/system status`, task submission/status/cancellation/retry/events, `/usage summary`, and `/audit task`. It uses Discord’s Guilds gateway intent and does not intentionally collect channel message history. AI inference and queued text tasks are processed by an operator-configured Ollama/Qwen model. Research is limited to bounded, read-only access to public GitHub repositories. The model has no shell, private-repository, GitHub-write, or other external-action tools. `/usage` reports available model metrics and limits; `/audit` shows task lifecycle events only. The Bot does not implement `/approve` or `/admin`, and no policy-decision ledger is provided.
 
-The Service is a development-stage project. Availability, response times, task processing, data retention, and support commitments are not guaranteed. Features, commands, and supported environments may change or be withdrawn. We will not silently treat a task request as permission to perform an external action.
+The Service is a development-stage project. Availability, response times, task processing, data retention, and support commitments are not guaranteed. Model outputs may be inaccurate, incomplete, misleading, or unsuitable; you are responsible for reviewing them. Features, commands, and supported environments may change or be withdrawn. We will not silently treat a task request or model output as permission to perform an external action.
 
 ## 4. Your submissions and responsibilities
 
@@ -43,17 +43,17 @@ You must not attempt to reverse engineer, exploit, or circumvent the Service exc
 
 The Service runs through Discord. Discord controls its own platform, accounts, interaction delivery, and associated data processing under its own terms and privacy policy. We do not control Discord’s availability or processing. The Bot’s operator may need access to a Discord server and application in order to run the Service.
 
-The Bot may be hosted on infrastructure selected by its operator. The repository currently does not identify a production host, region, or deployment. No AI or external task-execution provider is configured. If we add material third-party integrations, we will update the Service description and Privacy Policy as appropriate.
+The Bot may be hosted on infrastructure selected by its operator, and sends AI prompts to the Ollama endpoint selected for that deployment. The repository does not identify a production host, region, or model endpoint. Public GitHub research uses GitHub’s public API and cannot inspect private repositories or make changes. The operator must identify actual hosting, model, and storage providers in the Privacy Policy before launch.
 
 ## 6. Intellectual property and submitted content
 
 As between you and Shards, you retain any rights you hold in content you submit. You grant the Service operator a limited, non-exclusive, worldwide, royalty-free permission to receive, store, reproduce, and process that content only as reasonably necessary to provide, secure, and maintain the Service, comply with law, and enforce these Terms. This permission ends when the content is deleted, subject to backup, legal, and security retention described in the Privacy Policy.
 
-The Bot, its code, name, branding, and materials are owned by or licensed to their respective rights holders. The repository is marked `UNLICENSED`; that label does not grant users permission to copy, redistribute, or commercially exploit the project. Nothing in these Terms transfers ownership of the Bot or grants rights not expressly stated.
+You retain rights you hold in submissions. AI-generated output may not be unique and may be inaccurate; rights in model output depend on applicable law and the selected model’s terms. The repository code is licensed under the MIT License as stated in `LICENSE`; the Shards name and branding may have separate rights. Nothing in these Terms transfers ownership of the Bot or grants rights not expressly stated.
 
 ## 7. Privacy and data
 
-The [Privacy Policy](PRIVACY_POLICY.md) describes the information currently handled by the Bot, why it is handled, who may receive it, and the current limitations of storage and retention. In particular, task requests are stored as plain text in a local JSON ledger, and the current implementation has no automated retention period or in-Bot deletion command. Do not submit information that you would not want an authorised operator to access.
+The [Privacy Policy](PRIVACY_POLICY.md) describes the information currently handled by the Bot, including task text/results, the operator-selected model endpoint, and metadata-only usage records. Task requests and results are stored as plain text in a local JSON ledger without a time-based retention period or in-Bot deletion command; usage metadata is held in a separate bounded ledger. Do not submit information that you would not want an authorised operator or configured model host to access.
 
 ## 8. Changes, suspension, and termination
 
@@ -67,7 +67,7 @@ We may revise these Terms. The final published version should state how users wi
 
 To the maximum extent permitted by applicable law, the Service is provided “as is” and “as available.” We disclaim implied warranties and conditions, including merchantability, fitness for a particular purpose, title, non-infringement, availability, accuracy, and error-free operation. The Bot is not professional, legal, medical, financial, security, or emergency advice. Do not rely on it for decisions requiring professional judgement or for time-critical or safety-critical purposes.
 
-Nothing in this section excludes a warranty or right that applicable law does not permit us to exclude. No disclaimer changes the fact that task submissions are not currently executed.
+Nothing in this section excludes a warranty or right that applicable law does not permit us to exclude. A model response or task result is text output only; it does not establish that any external action has been taken.
 
 ## 10. Limitation of liability
 

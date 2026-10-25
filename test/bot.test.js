@@ -44,7 +44,7 @@ test('preview config needs no token but rejects invalid IDs', () => {
 });
 test('registration payload exposes the full supported command set', () => {
   assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'ai', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 },
+    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'ai', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 }, { name: 'usage', type: 1 }, { name: 'audit', type: 1 },
   ]);
   for (const command of commands) assert.ok(command.description.length > 0);
   assert.equal(commands.find(c => c.name === 'roll').options[0].min_value, 2);
@@ -53,6 +53,8 @@ test('registration payload exposes the full supported command set', () => {
   assert.equal(commands.find(c => c.name === 'github').options[0].name, 'repo');
   assert.equal(commands.find(c => c.name === 'system').options[0].name, 'status');
   assert.deepEqual(commands.find(c => c.name === 'task').options.map(option => option.name), ['submit', 'research', 'status', 'retry', 'events', 'cancel']);
+  assert.deepEqual(commands.find(c => c.name === 'usage').options.map(option => option.name), ['summary']);
+  assert.deepEqual(commands.find(c => c.name === 'audit').options.map(option => option.name), ['task']);
 });
 test('ping replies with gateway latency and suppresses mentions', async () => {
   const i = interaction();
@@ -90,6 +92,8 @@ test('help lists community commands and truthfully labels task execution', async
   assert.match(i.replies[0].content, /\/choose/);
   assert.match(i.replies[0].content, /\/github repo/);
   assert.match(i.replies[0].content, /public GitHub research using bounded read-only tools/);
+  assert.match(i.replies[0].content, /\/usage summary/);
+  assert.match(i.replies[0].content, /policy decisions are not yet recorded/);
 });
 test('roll uses requested sides and defaults to a six-sided die', async () => {
   const requested = interaction({ commandName: 'roll', options: { getInteger: () => 20 } });
@@ -308,6 +312,6 @@ test('command CLI previews safely even with inherited Discord credentials', () =
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.apply, false);
-  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task']);
+  assert.deepEqual(output.commands.map(c => c.name), ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task', 'usage', 'audit']);
   assert.ok(!result.stdout.includes('must-not-be-used'));
 });

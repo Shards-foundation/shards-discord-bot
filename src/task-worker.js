@@ -18,6 +18,7 @@ function buildTaskPrompt(request) {
 export function createTaskWorker({
   taskStore,
   ollamaClient,
+  usageStore,
   workerId = 'qwen-worker-' + randomUUID().slice(0, 12),
   pollIntervalMs = 1_500,
   logger = console,
@@ -47,6 +48,20 @@ export function createTaskWorker({
       const result = typeof answer?.content === 'string' && answer.content.trim()
         ? answer.content.trim().slice(0, MAX_RESULT_CHARS)
         : 'The configured model returned an empty response. Please retry with a more specific request.';
+      if (usageStore && typeof usageStore.record === 'function') {
+        try {
+          await usageStore.record({
+            actorId: task.requesterId, guildId: task.guildId, taskId: task.id,
+            source: task.mode === 'github_research' ? 'task_research' : 'task_chat',
+            model: answer.model ?? ollamaClient.model,
+            promptTokens: answer.usage?.promptTokens ?? null,
+            completionTokens: answer.usage?.completionTokens ?? null,
+            durationNs: answer.usage?.durationNs ?? answer.totalDurationNs ?? null,
+          });
+        } catch {
+          logger.error('Task usage metrics could not be persisted.');
+        }
+      }
       const completed = await taskStore.finish(task.id, workerId, { result });
       return { processed: true, task: completed };
     } catch (error) {

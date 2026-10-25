@@ -26,7 +26,7 @@ test('sends a non-streaming bounded chat request to the fixed Ollama endpoint', 
     model: 'qwen3.5:4b',
     fetchImpl: async (url, options) => {
       captured = { url, options, body: JSON.parse(options.body) };
-      return response(200, { model: 'qwen3.5:4b', message: { content: 'Answer from Qwen.' }, total_duration: 1_500_000_000 });
+      return response(200, { model: 'qwen3.5:4b', message: { content: 'Answer from Qwen.' }, total_duration: 1_500_000_000, prompt_eval_count: 20, eval_count: 8 });
     },
   });
   const answer = await client.chat('Explain idempotency.');
@@ -37,6 +37,7 @@ test('sends a non-streaming bounded chat request to the fixed Ollama endpoint', 
   assert.equal(captured.body.options.num_predict, 512);
   assert.equal(answer.content, 'Answer from Qwen.');
   assert.equal(answer.totalDurationNs, 1_500_000_000);
+  assert.deepEqual(answer.usage, { promptTokens: 20, completionTokens: 8, durationNs: 1_500_000_000 });
 });
 
 test('rejects empty and oversized prompts before network access', async () => {
@@ -69,10 +70,10 @@ test('research uses Qwen tool calls to search public GitHub and returns the fina
       }
       if (url === 'http://127.0.0.1:11434/api/chat') {
         modelRound += 1;
-        if (modelRound === 1) return response(200, { model: 'qwen3.5:4b', message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'search_public_github_repositories', arguments: { query: 'qwen ollama' } } }] } });
+        if (modelRound === 1) return response(200, { model: 'qwen3.5:4b', message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'search_public_github_repositories', arguments: { query: 'qwen ollama' } } }] }, prompt_eval_count: 31, eval_count: 6, total_duration: 1_000_000_000 });
         const messages = JSON.parse(options.body).messages;
         assert.ok(messages.some(m => m.role === 'tool' && m.content.includes('ollama/ollama')));
-        return response(200, { model: 'qwen3.5:4b', message: { role: 'assistant', content: 'Ollama hosts local model inference. Source: https://github.com/ollama/ollama' } });
+        return response(200, { model: 'qwen3.5:4b', message: { role: 'assistant', content: 'Ollama hosts local model inference. Source: https://github.com/ollama/ollama' }, prompt_eval_count: 43, eval_count: 8, total_duration: 2_000_000_000 });
       }
       throw new Error('Unexpected URL: ' + url);
     },
@@ -80,6 +81,8 @@ test('research uses Qwen tool calls to search public GitHub and returns the fina
   const result = await client.research('Research Ollama and Qwen.');
   assert.match(result.content, /Source: https:\/\/github.com\/ollama\/ollama/);
   assert.equal(result.toolCallsUsed, 1);
+  assert.deepEqual(result.usage, { promptTokens: 74, completionTokens: 14, durationNs: 3_000_000_000 });
+  assert.equal(result.totalDurationNs, 3_000_000_000);
   assert.equal(requests.filter(r => r.url === 'https://api.github.com/search/repositories?q=qwen%20ollama&per_page=5').length, 1);
 });
 
