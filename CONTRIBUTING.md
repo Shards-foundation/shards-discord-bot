@@ -21,7 +21,7 @@ These checks should not require Discord credentials. Keep `.env` local and use `
 
 ## Slash commands
 
-The current commands include local-model `/ai` chat/research, public-only `/github repo`, task lifecycle commands, `/usage summary`, and `/audit task`. Preserve private responses for user/task/usage records, plain-text output, and `allowedMentions: { parse: [] }`. Task requests/results are stored as plain text and are requester- and guild-scoped. The model worker has no external side-effect tools. Usage records contain metadata only and must not contain prompts or generated text. Tests must not require Discord credentials or contact the Discord API.
+The current commands include local-model `/ai` chat/research, public-only `/github repo`, task lifecycle commands, `/usage summary`, and `/audit task`. Preserve private responses for user/task/usage records, plain-text output, and `allowedMentions: { parse: [] }`. Task requests/results are stored as plain text and are requester- and guild-scoped; retain the active-task cap and test its isolation, idempotency, and retry behavior. Direct AI calls use a process-local requester rate limit, one-at-a-time requester/server scopes, and a process concurrency cap; test limits with an injected clock and never rely on them as shared-cluster controls. The model worker has no external side-effect tools. Usage records contain metadata only and must not contain prompts or generated text. Tests must not require Discord credentials or contact the Discord API.
 
 Command registration is potentially destructive because bulk registration replaces the selected scope. Use the offline preview first, inspect existing commands, and never register globally casually:
 

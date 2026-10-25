@@ -87,6 +87,38 @@ test('task research queues the explicit read-only GitHub research mode', async t
   assert.equal(stored.mode, 'github_research');
 });
 
+test('task status clips long generated results to Discord message limits', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'shards-task-long-result-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = createTaskStore({ filePath: join(directory, 'tasks.json') });
+  const task = await store.submit({ requesterId: userId, guildId, request: 'Return a long answer', idempotencyKey: 'long-result-seed-001' });
+  await store.claimNext('worker-long-result');
+  await store.finish(task.id, 'worker-long-result', { result: '😀'.repeat(1_800) });
+
+  const status = taskInteraction('status', { taskId: task.id });
+  await handleInteraction(status, { error() {} }, store);
+
+  const content = status.replies.at(-1).content;
+  assert.ok(content.length <= 2_000);
+  assert.match(content, /truncated to fit Discord/i);
+  assert.match(content, new RegExp(`${task.id}: completed`));
+  assert.deepEqual(status.replies.at(-1).allowedMentions, { parse: [] });
+});
+
+test('/task submit explains the per-requester active queue limit privately', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'shards-task-active-limit-command-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = createTaskStore({ filePath: join(directory, 'tasks.json'), maxActiveTasksPerRequester: 1 });
+  await handleInteraction(taskInteraction('submit', { request: 'First task' }), { error() {} }, store);
+
+  const second = taskInteraction('submit', { request: 'Second task' });
+  await handleInteraction(second, { error() {} }, store);
+
+  assert.match(second.replies.at(-1).content, /active task limit \(1\)/i);
+  assert.match(second.replies.at(-1).content, /running task to finish or cancel a queued task/i);
+  assert.equal(second.replies[0].flags, MessageFlags.Ephemeral);
+});
+
 test('task status does not reveal another server member’s work', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'shards-task-command-auth-test-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

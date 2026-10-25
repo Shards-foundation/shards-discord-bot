@@ -4,11 +4,19 @@ import { createTaskStore } from './tasks.js';
 import { createOllamaClient } from './ollama.js';
 import { createTaskWorker } from './task-worker.js';
 import { createUsageStore } from './usage.js';
+import { createAiRequestLimiter } from './ai-limiter.js';
 
 export function createBot(logger = console, {
-  taskStore = createTaskStore({ filePath: process.env.SHARDS_TASK_STORE_PATH || '.data/tasks.json' }),
+  taskStore = createTaskStore({
+    filePath: process.env.SHARDS_TASK_STORE_PATH || '.data/tasks.json',
+    maxActiveTasksPerRequester: Number(process.env.SHARDS_MAX_ACTIVE_TASKS_PER_REQUESTER || 5),
+  }),
   ollamaClient = createOllamaClient(),
   usageStore = createUsageStore({ filePath: process.env.SHARDS_USAGE_STORE_PATH || '.data/usage.json' }),
+  aiLimiter = createAiRequestLimiter({
+    requestsPerMinute: Number(process.env.SHARDS_AI_REQUESTS_PER_MINUTE || 5),
+    maxConcurrent: Number(process.env.SHARDS_AI_MAX_CONCURRENT || 2),
+  }),
 } = {}) {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds],
@@ -21,7 +29,7 @@ export function createBot(logger = console, {
   });
   client.once(Events.ClientReady, () => { client.taskWorker = taskWorker; });
   client.on(Events.InteractionCreate, interaction => {
-    void handleInteraction(interaction, logger, taskStore, fetch, ollamaClient, usageStore).catch(() => logger.error('Interaction processing failed.'));
+    void handleInteraction(interaction, logger, taskStore, fetch, ollamaClient, usageStore, aiLimiter).catch(() => logger.error('Interaction processing failed.'));
   });
   client.on(Events.Error, () => logger.error('Discord client error.'));
   client.on(Events.ShardError, () => logger.error('Discord gateway connection error.'));

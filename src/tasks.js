@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 const MAX_REQUEST_LENGTH = 2_000;
 const MAX_TASKS = 10_000;
 const MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_ACTIVE_TASKS_PER_REQUESTER = 5;
 const TASK_STATES = new Set(['queued', 'running', 'completed', 'failed', 'cancelled']);
 
 function validId(value, label) {
@@ -18,12 +19,33 @@ function validDatabase(data) {
     && data.tasks.every(task => task && typeof task.id === 'string' && TASK_STATES.has(task.state));
 }
 
+export class TaskActiveLimitError extends Error {
+  constructor(limit) {
+    super(`Active task limit reached (${limit}).`);
+    this.name = 'TaskActiveLimitError';
+    this.code = 'TASK_ACTIVE_LIMIT';
+    this.limit = limit;
+  }
+}
+
+function enforceActiveTaskLimit(database, requesterId, guildId, limit) {
+  const activeCount = database.tasks.filter(task => task.requesterId === requesterId
+    && task.guildId === guildId && (task.state === 'queued' || task.state === 'running')).length;
+  if (activeCount >= limit) throw new TaskActiveLimitError(limit);
+}
+
 /**
  * Create a single-process, durable task ledger. State changes are serialized
  * and atomically replaced on disk. Deploy one bot process per data file; use a
  * shared transactional database before scaling to multiple workers or replicas.
  */
-export function createTaskStore({ filePath = '.data/tasks.json', now = () => new Date(), id = randomUUID } = {}) {
+export function createTaskStore({
+  filePath = '.data/tasks.json', now = () => new Date(), id = randomUUID,
+  maxActiveTasksPerRequester = DEFAULT_MAX_ACTIVE_TASKS_PER_REQUESTER,
+} = {}) {
+  if (!Number.isInteger(maxActiveTasksPerRequester) || maxActiveTasksPerRequester < 1 || maxActiveTasksPerRequester > 100) {
+    throw new Error('maxActiveTasksPerRequester must be an integer from 1 to 100.');
+  }
   let database;
   let lock = Promise.resolve();
 
@@ -117,6 +139,7 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
       const existing = database.tasks.find(task => task.guildId === guildId
         && task.requesterId === requesterId && task.idempotencyKey === idempotencyKey);
       if (existing) return structuredClone(existing);
+      enforceActiveTaskLimit(database, requesterId, guildId, maxActiveTasksPerRequester);
       if (database.tasks.length >= MAX_TASKS) throw new Error('Task capacity reached; operator maintenance is required.');
       const at = now().toISOString();
       const task = {
@@ -196,6 +219,7 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
       if ((task.requesterId !== actorId || (guildId && task.guildId !== guildId)) && !isOperator) throw new Error('Not authorised to retry this task.');
       if (task.state !== 'failed') throw new Error('Only failed tasks can be retried.');
       if (task.attempts >= MAX_ATTEMPTS) throw new Error('Task attempt limit reached; submit a new request.');
+      enforceActiveTaskLimit(database, task.requesterId, task.guildId, maxActiveTasksPerRequester);
       task.state = 'queued'; task.result = null; task.failureCode = null; task.updatedAt = now().toISOString();
       recordEvent(task, 'retry_requested', actorId, { previousAttempts: task.attempts });
       await persist();
@@ -223,5 +247,5 @@ export function createTaskStore({ filePath = '.data/tasks.json', now = () => new
     });
   }
 
-  return { submit, claimNext, finish, cancel, retry, get, events };
+  return { submit, claimNext, finish, cancel, retry, get, events, maxActiveTasksPerRequester };
 }

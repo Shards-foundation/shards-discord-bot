@@ -6,6 +6,7 @@ import { commands, handleInteraction, lookupPublicRepository } from '../src/comm
 import { registrationPlan, registerCommands } from '../src/registration.js';
 import { createBot, startBot } from '../src/bot.js';
 import { createShutdownHandler } from '../src/shutdown.js';
+import { createAiRequestLimiter } from '../src/ai-limiter.js';
 import { GatewayIntentBits, MessageFlags, Events } from 'discord.js';
 
 // Boundary doubles replace Discord network operations, never the command logic.
@@ -15,13 +16,15 @@ function interaction(overrides = {}) {
     isChatInputCommand: () => true,
     commandName: 'ping',
     client: { ws: { ping: 42 } },
-    user: { username: 'Alice' },
+    user: { id: '123456789012345678', username: 'Alice' },
     options: { getInteger: () => null, getString: () => '', getSubcommand: () => 'status' },
     deferred: false,
     replied: false,
+    deferCount: 0,
+    deferPayload: undefined,
     replies,
     reply: async payload => { replies.push(payload); },
-    deferReply: async () => { result.deferred = true; },
+    deferReply: async payload => { result.deferred = true; result.deferPayload = payload; result.deferCount += 1; },
     editReply: async payload => { result.replied = true; replies.push(payload); },
     followUp: async payload => { replies.push(payload); },
     ...overrides,
@@ -174,12 +177,50 @@ test('AI ask invokes the configured Ollama client and returns its answer private
     },
     listModels: async () => [],
   };
-  await handleInteraction(i, { error() {} }, undefined, fetch, ollamaClient);
+  await handleInteraction(i, { error() {} }, undefined, fetch, ollamaClient, undefined, createAiRequestLimiter());
   assert.deepEqual(calls, ['Explain event sourcing.']);
   assert.equal(i.deferred, true);
   assert.match(i.replies[0].content, /Event sourcing records state changes/);
   assert.match(i.replies[0].content, /qwen3\.5:4b/);
   assert.deepEqual(i.replies[0].allowedMentions, { parse: [] });
+});
+test('AI generation is deferred once and rate-limited before model work', async () => {
+  const aiLimiter = createAiRequestLimiter({ requestsPerMinute: 1, maxConcurrent: 1, now: () => 10_000 });
+  let calls = 0;
+  const ollamaClient = {
+    model: 'qwen3.5:4b',
+    chat: async () => { calls += 1; return { model: 'qwen3.5:4b', content: 'One answer.' }; },
+    listModels: async () => [],
+  };
+  const makeAI = () => interaction({
+    commandName: 'ai', guildId: '323456789012345678', user: { id: '123456789012345678', username: 'Alice' },
+    options: { getSubcommand: () => 'ask', getString: () => 'Explain queue backpressure.' },
+  });
+  const first = makeAI();
+  await handleInteraction(first, { error() {} }, undefined, fetch, ollamaClient, undefined, aiLimiter);
+  assert.equal(first.deferCount, 1);
+  assert.equal(first.deferPayload.flags, MessageFlags.Ephemeral);
+  assert.equal(calls, 1);
+
+  const second = makeAI();
+  await handleInteraction(second, { error() {} }, undefined, fetch, ollamaClient, undefined, aiLimiter);
+  assert.equal(second.deferCount, 1);
+  assert.equal(second.deferPayload.flags, MessageFlags.Ephemeral);
+  assert.match(second.replies.at(-1).content, /AI request limit reached/);
+  assert.equal(calls, 1);
+  assert.equal(aiLimiter.active, 0);
+
+  const dmLimiter = createAiRequestLimiter({ requestsPerMinute: 1, maxConcurrent: 1, now: () => 10_000 });
+  const makeDM = () => interaction({
+    commandName: 'ai', guildId: null, user: { id: '123456789012345678', username: 'Alice' },
+    options: { getSubcommand: () => 'ask', getString: () => 'Explain queue backpressure.' },
+  });
+  const dmFirst = makeDM();
+  await handleInteraction(dmFirst, { error() {} }, undefined, fetch, ollamaClient, undefined, dmLimiter);
+  const dmSecond = makeDM();
+  await handleInteraction(dmSecond, { error() {} }, undefined, fetch, ollamaClient, undefined, dmLimiter);
+  assert.match(dmSecond.replies.at(-1).content, /per minute in this DM/);
+  assert.equal(calls, 2);
 });
 test('AI research invokes the read-only research capability and labels tool usage', async () => {
   const i = interaction({ commandName: 'ai', options: { getSubcommand: () => 'research', getString: () => 'Find Qwen repositories.' } });
@@ -189,7 +230,7 @@ test('AI research invokes the read-only research capability and labels tool usag
     research: async prompt => ({ model: 'qwen3.5:4b', content: 'Found public repositories with source URLs.', toolCallsUsed: 2 }),
     listModels: async () => [],
   };
-  await handleInteraction(i, { error() {} }, undefined, fetch, client);
+  await handleInteraction(i, { error() {} }, undefined, fetch, client, undefined, createAiRequestLimiter());
   assert.match(i.replies[0].content, /Found public repositories/);
   assert.match(i.replies[0].content, /research tools: 2/);
 });
@@ -210,13 +251,15 @@ test('AI status and models query the configured Ollama endpoint', async () => {
 });
 test('AI endpoint failures are handled without leaking provider internals', async () => {
   const i = interaction({ commandName: 'ai', options: { getSubcommand: () => 'ask', getString: () => 'hello' } });
+  const aiLimiter = createAiRequestLimiter();
   await handleInteraction(i, { error() {} }, undefined, fetch, {
     model: 'qwen3.5:4b',
     chat: async () => { throw new Error('internal host secret'); },
     listModels: async () => [],
-  });
+  }, undefined, aiLimiter);
   assert.match(i.replies.at(-1).content, /Something went wrong/);
   assert.ok(!JSON.stringify(i.replies).includes('internal host secret'));
+  assert.equal(aiLimiter.active, 0);
 });
 test('non-chat interactions and unknown commands are ignored', async () => {
   for (const i of [interaction({ isChatInputCommand: () => false }), interaction({ commandName: 'missing' })]) {
