@@ -14,6 +14,14 @@ function normaliseBaseUrl(value) {
   return url.toString().replace(/\/+$/, '');
 }
 
+function usageMetrics(data) {
+  return {
+    promptTokens: Number.isSafeInteger(data?.prompt_eval_count) && data.prompt_eval_count >= 0 ? data.prompt_eval_count : null,
+    completionTokens: Number.isSafeInteger(data?.eval_count) && data.eval_count >= 0 ? data.eval_count : null,
+    durationNs: Number.isSafeInteger(data?.total_duration) && data.total_duration >= 0 ? data.total_duration : null,
+  };
+}
+
 export function createOllamaClient({
   baseUrl = process.env.OLLAMA_BASE_URL || DEFAULT_BASE_URL,
   model = process.env.OLLAMA_MODEL || DEFAULT_MODEL,
@@ -85,6 +93,7 @@ export function createOllamaClient({
       content: content.trim().slice(0, MAX_RESPONSE_CHARS),
       truncated: content.length > MAX_RESPONSE_CHARS,
       totalDurationNs: Number.isFinite(data.total_duration) ? data.total_duration : null,
+      usage: usageMetrics(data),
     };
   }
 
@@ -183,16 +192,38 @@ export function createOllamaClient({
       { role: 'user', content: prompt.trim() },
     ];
     let toolCallsUsed = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalDurationNs = 0;
+    let tokenMetricsAvailable = true;
+    let durationAvailable = true;
     for (let round = 0; round < 6; round += 1) {
       const data = await request('/api/chat', {
         model, stream: false, messages, tools: toolDefinitions,
         options: { temperature: 0.2, num_predict: 700 },
       });
+      const usage = usageMetrics(data);
+      if (usage.promptTokens === null || usage.completionTokens === null) tokenMetricsAvailable = false;
+      else {
+        promptTokens += usage.promptTokens;
+        completionTokens += usage.completionTokens;
+      }
+      if (usage.durationNs === null) durationAvailable = false;
+      else totalDurationNs += usage.durationNs;
       const message = data?.message;
       const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
       if (calls.length === 0) {
         if (typeof message?.content !== 'string' || !message.content.trim()) throw new Error('Qwen returned no research summary.');
-        return { model: typeof data.model === 'string' ? data.model : model, content: message.content.trim().slice(0, MAX_RESPONSE_CHARS), toolCallsUsed };
+        return {
+          model: typeof data.model === 'string' ? data.model : model,
+          content: message.content.trim().slice(0, MAX_RESPONSE_CHARS),
+          toolCallsUsed,
+          totalDurationNs: durationAvailable ? totalDurationNs : null,
+          usage: tokenMetricsAvailable ? {
+            promptTokens, completionTokens,
+            durationNs: durationAvailable ? totalDurationNs : null,
+          } : null,
+        };
       }
       if (toolCallsUsed + calls.length > 5) throw new Error('Research stopped at the tool-call limit. Narrow the question and try again.');
       messages.push({ role: 'assistant', content: message.content || '', tool_calls: calls });

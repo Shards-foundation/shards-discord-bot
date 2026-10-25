@@ -141,6 +141,23 @@ export const commands = [
       },
     ],
   },
+  {
+    name: 'usage',
+    description: 'Review your local-model usage and execution limits.',
+    type: ApplicationCommandType.ChatInput,
+    options: [{ type: ApplicationCommandOptionType.Subcommand, name: 'summary', description: 'Show token counts and configured budgets.' }],
+  },
+  {
+    name: 'audit',
+    description: 'Inspect your own task execution history.',
+    type: ApplicationCommandType.ChatInput,
+    options: [{
+      type: ApplicationCommandOptionType.Subcommand,
+      name: 'task',
+      description: 'View lifecycle events for one of your tasks.',
+      options: [{ type: ApplicationCommandOptionType.String, name: 'task_id', description: 'ID returned by /task submit.', required: true }],
+    }],
+  },
 ];
 
 function formatStatus(client) {
@@ -158,13 +175,31 @@ function formatStatus(client) {
   ].join('\n');
 }
 
-async function handleAICommand(interaction, ollamaClient) {
+async function recordAIUsage(usageStore, interaction, answer, source, logger) {
+  if (!usageStore || typeof usageStore.record !== 'function') return;
+  try {
+    await usageStore.record({
+      actorId: interaction.user.id,
+      guildId: interaction.guildId ?? null,
+      source,
+      model: answer.model ?? 'unknown',
+      promptTokens: answer.usage?.promptTokens ?? null,
+      completionTokens: answer.usage?.completionTokens ?? null,
+      durationNs: answer.usage?.durationNs ?? answer.totalDurationNs ?? null,
+    });
+  } catch {
+    logger.error('AI usage metrics could not be persisted.');
+  }
+}
+
+async function handleAICommand(interaction, ollamaClient, usageStore, logger) {
   const subcommand = interaction.options.getSubcommand();
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   let content;
   if (subcommand === 'ask' || subcommand === 'research') {
     const prompt = interaction.options.getString('prompt', true);
     const answer = subcommand === 'research' ? await ollamaClient.research(prompt) : await ollamaClient.chat(prompt);
+    await recordAIUsage(usageStore, interaction, answer, subcommand === 'research' ? 'ai_research' : 'ai_chat', logger);
     const responseText = answer.content.length > 1_750 ? answer.content.slice(0, 1_730) + '\n\n[Response truncated for Discord.]' : answer.content;
     const seconds = answer.totalDurationNs == null ? 'research tools: ' + (answer.toolCallsUsed ?? 0) : (answer.totalDurationNs / 1e9).toFixed(1) + 's';
     content = '**Shards AI · ' + answer.model + ' · ' + seconds + '**\n' + responseText;
@@ -229,6 +264,49 @@ async function handleTaskCommand(interaction, taskStore) {
   await interaction.editReply({ content, allowedMentions: { parse: [] } });
 }
 
+async function handleUsageCommand(interaction, usageStore) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (!usageStore) throw new Error('Usage store is unavailable.');
+  const usage = await usageStore.summary(interaction.user.id, interaction.guildId ?? null);
+  const modelEntries = Object.entries(usage.models);
+  const models = modelEntries.length
+    ? modelEntries.slice(0, 8).map(([model, requests]) => `${model}: ${requests}`).join(', ')
+      + (modelEntries.length > 8 ? `, +${modelEntries.length - 8} more` : '')
+    : 'none recorded';
+  const timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS || 120_000);
+  const content = [
+    `Successful model requests recorded: ${usage.requests}`,
+    `Requests with token metrics: ${usage.measuredRequests}/${usage.requests}`,
+    `Prompt tokens: ${usage.promptTokens}`,
+    `Generated tokens: ${usage.completionTokens}`,
+    `Model processing time: ${(usage.durationNs / 1e9).toFixed(1)} s`,
+    `Models: ${models}`,
+    'Application-level per-user rate limit: not configured.',
+    'Execution bounds: 3,000-character AI prompt; 512 generated tokens per chat; research up to 6 rounds and 5 public-GitHub tool calls (700 tokens per round).',
+    `Task worker: one task at a time; Ollama timeout ${timeoutMs} ms. Direct AI commands are not rate-limited by the application.`,
+    'Token and duration values are reported by Ollama; failed/partial calls may not be included. Local inference has no model API bill; host and electricity costs still apply.',
+    ...(usage.historyTruncated ? ['Older usage records were removed after the 20,000-record storage limit.'] : []),
+  ].join('\n');
+  await interaction.editReply({ content, allowedMentions: { parse: [] } });
+}
+
+async function handleAuditCommand(interaction, taskStore) {
+  if (!interaction.guildId) {
+    await interaction.reply({ content: 'Audit views are available only inside a server.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (!taskStore) throw new Error('Task store is unavailable.');
+  const taskId = interaction.options.getString('task_id', true);
+  const events = await taskStore.events(taskId, interaction.user.id, { guildId: interaction.guildId });
+  const content = events
+    ? (events.length
+      ? `**Task lifecycle audit (${events.length} events)**\n${events.slice(-15).map(event => `• ${event.at} — ${event.action}`).join('\n')}\nPolicy decisions are not yet recorded by this version.`
+      : 'No lifecycle events are recorded for this task.')
+    : 'Task not found or you are not authorised to view its audit history.';
+  await interaction.editReply({ content, allowedMentions: { parse: [] } });
+}
+
 const HELP_TEXT = [
   '**Shards bot commands**',
   '`/ping` — gateway latency check',
@@ -242,6 +320,8 @@ const HELP_TEXT = [
   '`/ai ask prompt` — send a prompt to the configured Qwen model through Ollama',
   '`/ai research prompt` — Qwen-assisted, read-only public GitHub research with a bounded tool loop',
   '`/ai status` and `/ai models` — check Ollama and installed models',
+  '`/usage summary` — review your token consumption and configured budgets; no per-user rate limit is enabled',
+  '`/audit task task_id` — inspect lifecycle events for your own task; policy decisions are not yet recorded',
   '`/help` — this command list',
 ].join('\n');
 
@@ -293,9 +373,9 @@ function chooseOption(raw) {
   return { value: options[randomInt(options.length)] };
 }
 
-export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient()) {
+export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient(), usageStore) {
   if (!interaction.isChatInputCommand()) return;
-  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task'].includes(interaction.commandName);
+  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task', 'usage', 'audit'].includes(interaction.commandName);
   if (!supported) return;
   try {
     let content;
@@ -328,7 +408,13 @@ export async function handleInteraction(interaction, logger = console, taskStore
       await handleTaskCommand(interaction, taskStore);
       return;
     } else if (interaction.commandName === 'ai') {
-      await handleAICommand(interaction, ollamaClient);
+      await handleAICommand(interaction, ollamaClient, usageStore, logger);
+      return;
+    } else if (interaction.commandName === 'usage') {
+      await handleUsageCommand(interaction, usageStore);
+      return;
+    } else if (interaction.commandName === 'audit') {
+      await handleAuditCommand(interaction, taskStore);
       return;
     } else if (interaction.options.getSubcommand() === 'status') {
       content = formatStatus(interaction.client);

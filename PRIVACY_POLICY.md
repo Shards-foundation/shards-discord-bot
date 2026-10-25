@@ -12,7 +12,7 @@
 
 This Privacy Policy describes information handled through the Shards Discord Bot (the “Bot” or “Service”), the purposes for which it is handled, the current storage and retention limitations, and how to contact the operator. The Service is operated by the controller identified above (“Shards,” “we,” “us,” or “our”).
 
-This draft describes the source code in this repository as of its publication. It is not a statement that the Bot is deployed or available to the public. There is currently no production hosting provider, data region, AI model, or task-execution integration configured in the repository. If the deployed setup differs, this policy must be revised before that setup is used.
+This draft describes the source code in this repository as of its publication. It is not a statement that the Bot is deployed or available to the public. The code supports self-hosted Ollama/Qwen inference, read-only public GitHub research, and a text-only task worker, but no production host, data region, model endpoint, or live Discord deployment is configured by this repository. The operator must identify the actual model host and other providers before publishing this policy; revise it if the deployed setup differs.
 
 Discord separately collects and processes information under its own terms and privacy policy. This policy does not cover Discord’s independent processing, other bots, or third-party websites.
 
@@ -22,27 +22,28 @@ The Bot does not request or use Discord’s privileged Message Content intent an
 
 | Information | What the current Bot does with it |
 | --- | --- |
-| Discord user ID | Used to associate a task with its requester and enforce requester-level access. The `/hello` response also uses the invoking username transiently; usernames are not written to the task ledger. |
-| Discord server (guild) ID | Stored with a task and used to keep task access within the server where it was submitted. Task submission is not available in direct messages. |
+| Discord user ID | Used to associate a task and model-usage record with its requester and enforce requester-level access. The `/hello` response also uses the invoking username transiently; usernames are not written to the task or usage ledgers. |
+| Discord server (guild) ID | Stored with tasks and usage records created in a server, and used to keep those views within that server. Usage records from direct messages have no guild ID and remain scoped to the requesting user; task submission remains unavailable in direct messages. |
 | Interaction ID | Used as an idempotency key to avoid duplicate task records when the same interaction is retried. |
 | Task request text | The text submitted with `/task submit` (up to 2,000 characters) is stored as plain text in the task ledger. Do not include passwords, tokens, payment data, sensitive personal information, or confidential material. |
-| Task record and lifecycle metadata | A random task ID, state (such as queued, running, completed, failed, or cancelled), creation/update timestamps, attempt count, worker identifier when claimed, and a limited result or failure code. The current bot has no executor, so new requests remain queued unless an operator or later integration changes their state. |
+| Task record and lifecycle metadata | A random task ID, state (such as queued, running, completed, failed, or cancelled), creation/update timestamps, attempt count, worker identifier when claimed, and a limited result or failure code. The configured worker processes text-only requests through the operator-selected Ollama endpoint; it has no GitHub write, shell, or other external-action tools. |
 | Audit events | Task submission, worker claims, completion/failure, cancellation, and restart recovery are recorded with a task ID, actor/worker identifier, timestamp, action, and limited operational details. The request text is not copied into these event details. |
+| Model-usage metadata | Successful model-call records include user ID, guild ID when available, model tag, source type, optional task ID, Ollama-reported prompt/completion token counts and duration, and timestamp. Metrics can be unavailable. Prompts and generated text are not copied into this ledger. The latest 20,000 records are retained; older records are removed as new records arrive. |
 | Operational information | The process uses runtime and gateway state to answer `/system status`. It emits limited static error messages. On startup, it logs the Bot’s own Discord account ID; it is not designed to log raw task text or raw Discord API errors. |
 
 Discord and the hosting provider may process additional technical information, such as connection and security logs, under their own roles and policies. The actual provider and region must be documented here before production launch.
 
 ## 3. Purposes and legal bases
 
-The operator uses the information above to receive and display command responses; save, identify, secure, and manage a task request; prevent duplicate submissions; limit task access to the requester and server; recover interrupted work; maintain and secure the Bot; respond to support or legal requests; and comply with applicable law.
+The operator uses the information above to receive and display command responses; process AI requests through the configured model endpoint; save, identify, secure, and manage task requests; prevent duplicate submissions; limit task and usage views to the requester and server; recover interrupted work; measure model usage; maintain and secure the Bot; respond to support or legal requests; and comply with applicable law.
 
 **Controller review required:** The operator must confirm and document the applicable legal basis for each purpose in every relevant jurisdiction before publication. Where the GDPR or similar laws apply, potential bases may include providing a feature requested by the user, legitimate interests in operating and securing the Service (subject to applicable balancing requirements), consent where legally required, or compliance with a legal obligation. This list is not a determination that a particular basis applies. If consent is used, the operator must implement a valid method to obtain and withdraw it.
 
 ## 4. How information is stored
 
-Task data is stored in a JSON file at `SHARDS_TASK_STORE_PATH`, which defaults to `.data/tasks.json`. The application writes updates through an atomic file replacement, creates new data files with owner-only permissions, and attempts to restrict an existing file to owner-only access. These controls do not encrypt the task ledger, provide tamper-evident audit history, or replace a managed database and access-control process.
+Task data is stored in a JSON file at `SHARDS_TASK_STORE_PATH`, which defaults to `.data/tasks.json`. Model-usage metadata is stored separately at `SHARDS_USAGE_STORE_PATH`, which defaults to `.data/usage.json`; the usage ledger keeps at most the latest 20,000 records. Both stores use atomic file replacement and owner-only file permissions. These controls do not encrypt the files, provide tamper-evident audit history, or replace a managed database and access-control process.
 
-The Docker image sets the task file path to `/data/tasks.json`; an operator deploying it must provide and protect a persistent volume. Data may be accessible to authorised server/host operators and anyone with access to the machine, mounted storage, or backups. The current JSON store is designed for a single running Bot process and must not be shared between multiple replicas.
+The Docker Compose configuration places the task and usage files on `/data` in a persistent volume. An operator deploying the Bot must provide and protect that volume. Data may be accessible to authorised server/host operators and anyone with access to the machine, mounted storage, or backups. The JSON stores are designed for a single running Bot process and must not be shared between multiple replicas.
 
 Task records are not end-to-end encrypted. Do not submit content that requires a higher level of confidentiality than this design provides.
 
@@ -50,7 +51,7 @@ Task records are not end-to-end encrypted. Do not submit content that requires a
 
 The Bot sends interaction responses through Discord and uses Discord’s gateway and application command infrastructure. Discord’s processing is governed by Discord’s own policies. The Bot’s operator and authorised technical administrators may access the task ledger to operate, secure, troubleshoot, back up, or delete it.
 
-The repository does not configure an AI/model provider, analytics platform, advertising network, or task executor. A deployment may involve an infrastructure, storage, monitoring, or backup provider chosen outside this repository. **Before launch, list each provider, its role, data-access scope, processing location, and relevant privacy/security terms here.** Do not claim that no other provider receives data until the actual deployment has been verified.
+The Bot sends prompts to the Ollama endpoint selected by the operator. The endpoint may run on the same machine or on another host; if hosted by a third party, that provider may receive the prompts and model outputs and must be identified here before launch. For research commands, the Bot also makes bounded read-only requests to GitHub's public API and reads only public repository metadata or permitted text files. It cannot access private repositories or write to GitHub. The actual Ollama host, infrastructure, storage, monitoring, and backup providers are not configured in this repository. **Before launch, list each provider, its role, data-access scope, processing location, and relevant privacy/security terms here.**
 
 We may disclose information if reasonably necessary to comply with law or valid legal process, protect users or the Service, investigate abuse or security incidents, or establish, exercise, or defend legal claims. Any disclosure must be limited as required by applicable law.
 
@@ -60,13 +61,13 @@ Discord and a future hosting or storage provider may process information in coun
 
 ## 7. Retention and deletion
 
-**Current implementation limitation:** The task ledger has no automatic time-based retention, no user-facing delete command, and no per-task purge operation. Task records and task audit events therefore remain in the JSON file until an authorised operator deletes or replaces that file as part of maintenance. The application stops accepting new submissions when its task-record capacity is reached; that limit is not a retention policy. Copies may remain in backups or filesystem snapshots until those copies expire or are deleted under the operator’s backup practices.
+**Current implementation limitation:** The task ledger has no automatic time-based retention, no user-facing delete command, and no per-task purge operation. Task records and task audit events therefore remain until an authorised operator deletes or replaces the task file. The separate usage ledger retains only the latest 20,000 model-call records across all users; older usage records are dropped as new ones are added, with no time-based schedule. Copies may remain in backups or filesystem snapshots until those copies expire or are deleted under the operator’s backup practices.
 
 Before accepting real user data, the operator should establish and publish a retention schedule, implement a reliable deletion process, address backups, and document any legal holds. A user may request access, correction, or deletion using the contact in the header; the operator will assess and respond as required by applicable law. The current software cannot fulfil such a request automatically, and deletion may require manual operator action and coordination with backups.
 
 ## 8. Security
 
-We use measures implemented in the current code, including a minimal Discord intent set, ephemeral task responses, requester/server checks, bounded request and result lengths, owner-only task-file permissions, atomic file replacement, generic error logging, and limited recovery attempts for interrupted work. These measures reduce certain risks but do not guarantee security. The file is not encrypted, the audit events are not tamper-proof, the filesystem is not a multi-tenant database, and the repository does not configure production monitoring, managed secrets, backups, or incident-response tooling.
+We use measures implemented in the current code, including a minimal Discord intent set, ephemeral AI/task/usage/audit responses, requester/server checks, bounded request and result lengths, owner-only task/usage-file permissions, atomic file replacement, generic error logging, read-only public GitHub research, and limited recovery attempts for interrupted work. These measures reduce certain risks but do not guarantee security. The files are not encrypted, audit events are not tamper-proof, the filesystem is not a multi-tenant database, and the repository does not configure production monitoring, managed secrets, backups, or incident-response tooling. No application-level per-user AI rate limit is currently enforced.
 
 Users should not submit secrets or sensitive information. The operator should store the Discord bot token in an appropriate secret manager in production, restrict host and backup access, keep software updated, define incident response and token rotation procedures, and avoid running multiple Bot replicas against the same task file.
 
@@ -76,7 +77,7 @@ Depending on where you live, you may have rights to request access to, correctio
 
 To make a request, contact `[PRIVACY CONTACT]` and include enough information for the operator to locate the relevant task without sending passwords or Discord credentials. The operator may request reasonable verification, will use the information for handling the request, and will respond within applicable legal time limits. You may also contact the relevant supervisory authority or regulator.
 
-The Bot does not currently provide a cookie-based web service, targeted advertising, an analytics profile, or an automated decision-making feature. Task request text is not currently submitted to an AI model or used for model training.
+The Bot does not currently provide a cookie-based web service, targeted advertising, or an analytics profile. Task requests and direct AI prompts are sent to the operator-configured Ollama endpoint for inference; generated task results are stored in the task ledger. Usage accounting stores metadata only, not prompts or generated text. Model output is not automatically used by the Bot to make decisions about users, and the Bot does not provide an action-approval or admin-control system in this version. The operator must verify the configured model host's data handling and training practices before launch.
 
 ## 10. Children
 

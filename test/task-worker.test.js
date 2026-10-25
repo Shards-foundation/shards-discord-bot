@@ -48,6 +48,25 @@ test('research-mode tasks use only the bounded read-only GitHub research client'
   assert.equal(outcome.task.result, 'Found public repository evidence.');
 });
 
+test('worker records model usage against the task owner and guild', async () => {
+  const calls = [];
+  const trackedTask = { ...task, requesterId: '123456789012345678', guildId: '223456789012345678' };
+  const store = fakeStore({ claimed: trackedTask });
+  const worker = createTaskWorker({
+    taskStore: store,
+    ollamaClient: { model: 'qwen3.5:4b', async chat() {
+      return { model: 'qwen3.5:4b', content: 'Done.', usage: { promptTokens: 20, completionTokens: 6, durationNs: 900_000_000 } };
+    } },
+    usageStore: { async record(event) { calls.push(event); } },
+    logger: { error() {} },
+  });
+  await worker.processOnce();
+  assert.deepEqual(calls, [{
+    actorId: trackedTask.requesterId, guildId: trackedTask.guildId, taskId: trackedTask.id,
+    source: 'task_chat', model: 'qwen3.5:4b', promptTokens: 20, completionTokens: 6, durationNs: 900_000_000,
+  }]);
+});
+
 test('worker marks model failures as failed without exposing exception details', async () => {
   const store = fakeStore();
   const worker = createTaskWorker({

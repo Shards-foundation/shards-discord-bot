@@ -10,9 +10,10 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | --- | --- |
 | Runtime | Node.js `>=24.17`, ESM, discord.js 14 |
 | Gateway intents | `Guilds` only; no privileged intents |
-| Commands | `/ai ask`, `/ai research`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task submit`, `/task research`, `/task status`, `/task cancel`, `/task retry`, `/task events`, community utilities |
+| Commands | `/ai ask`, `/ai research`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task` lifecycle commands, `/usage summary`, `/audit task`, community utilities |
 | AI inference | Real Ollama `/api/chat` integration using configured Qwen model; no cloud AI key required |
 | Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects |
+| Usage/audit | Requester- and guild-scoped token metadata and task lifecycle events; no policy-decision ledger yet |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
 | Tests | Node's built-in test runner; no Discord credentials required |
 | Secrets | Local `.env` only; never committed or logged |
@@ -21,7 +22,7 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 ## Repository map
 
 ```text
-src/                 Bot startup, Ollama client, commands, task lifecycle, registration logic
+src/                 Bot startup, Ollama client, commands, task/usage ledgers, registration logic
 Dockerfile           Non-root bot container image
 compose.yaml          Bot + Ollama service orchestration
 scripts/             Safe operator-facing command tools
@@ -70,8 +71,12 @@ These checks are designed to run without credentials or Discord network access. 
 - `/task submit` — stores a bounded text request in the durable queue; the background worker sends it to the configured local Qwen model when Ollama is available.
 - `/task research` — queues public GitHub research using the existing bounded, read-only Qwen tool loop. It cannot access private repositories or write to GitHub.
 - `/task status` — inspect your task; `/task cancel` — cancel queued work; `/task retry` — requeue a failed task within its three-attempt limit; `/task events` — inspect the last ten audit events for your task.
+- `/usage summary` — privately reports successful model requests, Ollama-reported prompt/completion token counts and processing time, models used, generation limits, and rate-limit configuration. It is requester-scoped and separated by server; direct-message AI usage is scoped to the requester without a guild ID. The application does not currently enforce per-user rate limits; direct `/ai` calls can run concurrently. Failed or partial model calls may not be counted.
+- `/audit task task_id` — privately displays task lifecycle timestamps and event names for your own task. It does not yet record policy decisions or approvals; `/approve` and `/admin` are not implemented.
 
 Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. The worker supports two explicit modes: `chat` (text generation without tools) and `github_research` (bounded public GitHub search, metadata, and safe text-file reads). Research mode cannot access private repositories, write to GitHub, execute code, or use arbitrary URLs. The worker stores generated results or a non-sensitive failure code. Owners can retry failed tasks that have remaining attempts and inspect the event history; audit views are scoped to the owning user and guild. A crash can cause a task to be retried; use a shared transactional database and cross-process leases before running multiple bot instances.
+
+Successful model calls also write metadata-only usage records to `SHARDS_USAGE_STORE_PATH` (default `.data/usage.json`). Records contain Discord user/guild IDs, model name, source type, optional task ID, Ollama token counts/duration, and timestamp—never prompt or response text. The store uses owner-only file permissions and atomic replacement, is single-process only, and retains at most the latest 20,000 records across all users; older usage history is dropped as new records arrive. This capacity limit is not a time-based retention schedule.
 
 Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing.
 
@@ -114,6 +119,7 @@ Never run a write command casually or as part of routine CI. The registration CL
 | `DISCORD_BOT_TOKEN` | For live startup / writes | Bot token; store locally in ignored `.env` |
 | `DISCORD_APPLICATION_ID` | No | Numeric application snowflake; defaults to `1562965805413568532` |
 | `SHARDS_TASK_STORE_PATH` | No | Durable task ledger file path; defaults to `.data/tasks.json` |
+| `SHARDS_USAGE_STORE_PATH` | No | Model usage metadata file path; defaults to `.data/usage.json` |
 
 The checked-in `.env.example` contains no credentials. Rotate a token immediately in the Discord Developer Portal if it is exposed.
 

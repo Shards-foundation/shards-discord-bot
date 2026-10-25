@@ -1,7 +1,8 @@
 FROM node:24.17.0-bookworm-slim
 
 ENV NODE_ENV=production \
-    SHARDS_TASK_STORE_PATH=/data/tasks.json
+    SHARDS_TASK_STORE_PATH=/data/tasks.json \
+    SHARDS_USAGE_STORE_PATH=/data/usage.json
 WORKDIR /app
 
 COPY package.json package-lock.json ./
