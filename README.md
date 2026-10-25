@@ -1,6 +1,6 @@
 # Shards Discord Bot
 
-A private, safety-first Discord application foundation for **Shards inc**. The bot provides utility commands, local Ollama/Qwen inference, read-only public GitHub research, a durable task queue with a background Qwen worker, offline tests, and deliberately guarded slash-command registration.
+A safety-first Discord application foundation for **Shards inc**. The public bot repository provides utility commands, local Ollama/Qwen inference, read-only public GitHub research, a durable task queue with a background Qwen worker, offline tests, and deliberately guarded slash-command registration.
 
 > **Status:** foundation / development. No production deployment is configured. Startup does not register commands, and no live Discord changes are part of routine development.
 
@@ -12,7 +12,7 @@ A private, safety-first Discord application foundation for **Shards inc**. The b
 | Gateway intents | `Guilds` only; no privileged intents |
 | Commands | `/ai ask`, `/ai research`, `/ai status`, `/ai models`, `/github repo`, `/system status`, `/task` lifecycle commands, `/usage summary`, `/audit task`, community utilities |
 | AI inference | Real Ollama `/api/chat` integration using configured Qwen model; no cloud AI key required |
-| Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects |
+| Task execution | Durable queue with a background Qwen worker; text generation only, no external side effects; active tasks capped per requester and server |
 | Usage/audit | Requester- and guild-scoped token metadata and task lifecycle events; no policy-decision ledger yet |
 | Registration | Offline preview by default; explicit scope and confirmation required to write |
 | Tests | Node's built-in test runner; no Discord credentials required |
@@ -54,6 +54,8 @@ npm run smoke:ollama # live check; requires a running Ollama server and installe
 
 These checks are designed to run without credentials or Discord network access. GitHub Actions runs the syntax checks and test suite on pushes and pull requests; dependency updates are proposed by Dependabot.
 
+For the evidence-backed quality checklist, repository findings, and deferred priorities, see [BOT_QUALITY_RESEARCH.md](./BOT_QUALITY_RESEARCH.md).
+
 ## Commands
 
 - `/ping` — reports the current Discord gateway latency, or `unavailable` until a valid measurement exists.
@@ -68,17 +70,17 @@ These checks are designed to run without credentials or Discord network access. 
 - `/ai status` — checks API reachability and whether the configured model is installed.
 - `/ai models` — lists the models available to the configured Ollama server.
 - `/system status` — reports the actual Discord ready state, gateway latency, process uptime, and Node.js runtime.
-- `/task submit` — stores a bounded text request in the durable queue; the background worker sends it to the configured local Qwen model when Ollama is available.
+- `/task submit` — stores a bounded text request in the durable queue; the background worker sends it to the configured local Qwen model when Ollama is available. Each requester may have at most five queued/running tasks per server by default.
 - `/task research` — queues public GitHub research using the existing bounded, read-only Qwen tool loop. It cannot access private repositories or write to GitHub.
 - `/task status` — inspect your task; `/task cancel` — cancel queued work; `/task retry` — requeue a failed task within its three-attempt limit; `/task events` — inspect the last ten audit events for your task.
-- `/usage summary` — privately reports successful model requests, Ollama-reported prompt/completion token counts and processing time, models used, generation limits, and rate-limit configuration. It is requester-scoped and separated by server; direct-message AI usage is scoped to the requester without a guild ID. The application does not currently enforce per-user rate limits; direct `/ai` calls can run concurrently. Failed or partial model calls may not be counted.
+- `/usage summary` — privately reports successful model requests, Ollama-reported prompt/completion token counts and processing time, models used, generation limits, AI request limits, and the active-task cap. By default, generated AI commands allow five requests per minute per requester/server (or DM), one simultaneous call per requester and per server/DM scope, and two direct calls across the bot process. AI limits are in-memory, reset on restart, and are not shared across replicas. Task requests are capped at five queued/running tasks per requester/server by default. Failed or partial model calls may not be counted.
 - `/audit task task_id` — privately displays task lifecycle timestamps and event names for your own task. It does not yet record policy decisions or approvals; `/approve` and `/admin` are not implemented.
 
-Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. The worker supports two explicit modes: `chat` (text generation without tools) and `github_research` (bounded public GitHub search, metadata, and safe text-file reads). Research mode cannot access private repositories, write to GitHub, execute code, or use arbitrary URLs. The worker stores generated results or a non-sensitive failure code. Owners can retry failed tasks that have remaining attempts and inspect the event history; audit views are scoped to the owning user and guild. A crash can cause a task to be retried; use a shared transactional database and cross-process leases before running multiple bot instances.
+Task records are written atomically to `SHARDS_TASK_STORE_PATH` (default `.data/tasks.json`) with owner-only file permissions. Requests are stored as plain text: do not submit secrets or sensitive personal information. By default, each requester can have at most five queued or running tasks per server; set `SHARDS_MAX_ACTIVE_TASKS_PER_REQUESTER` to an integer from 1 to 100 to tune this limit. Duplicate interaction retries remain idempotent, while new submissions and retries are refused when the cap is reached. The current JSON ledger is single-process only; it recovers interrupted `running` tasks to `queued` and records that recovery, up to three attempts before marking the task failed. The worker supports two explicit modes: `chat` (text generation without tools) and `github_research` (bounded public GitHub search, metadata, and safe text-file reads). Research mode cannot access private repositories, write to GitHub, execute code, or use arbitrary URLs. The worker stores generated results or a non-sensitive failure code. Owners can retry failed tasks that have remaining attempts and inspect the event history; audit views are scoped to the owning user and guild. A crash can cause a task to be retried; use a shared transactional database and cross-process leases before running multiple bot instances.
 
 Successful model calls also write metadata-only usage records to `SHARDS_USAGE_STORE_PATH` (default `.data/usage.json`). Records contain Discord user/guild IDs, model name, source type, optional task ID, Ollama token counts/duration, and timestamp—never prompt or response text. The store uses owner-only file permissions and atomic replacement, is single-process only, and retains at most the latest 20,000 records across all users; older usage history is dropped as new records arrive. This capacity limit is not a time-based retention schedule.
 
-Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing.
+Random utilities use Node's built-in cryptographic random integer generator and add no dependencies. The GitHub command makes a bounded read-only request to the public GitHub API and handles rate limits and timeouts. All command replies disable automatic mention parsing and are capped at 1,900 characters; longer output includes a truncation notice to stay below Discord's 2,000-character message-content limit.
 
 ### Ollama + Qwen
 
@@ -119,6 +121,9 @@ Never run a write command casually or as part of routine CI. The registration CL
 | `DISCORD_BOT_TOKEN` | For live startup / writes | Bot token; store locally in ignored `.env` |
 | `DISCORD_APPLICATION_ID` | No | Numeric application snowflake; defaults to `1562965805413568532` |
 | `SHARDS_TASK_STORE_PATH` | No | Durable task ledger file path; defaults to `.data/tasks.json` |
+| `SHARDS_MAX_ACTIVE_TASKS_PER_REQUESTER` | No | Queued/running task limit per requester per server (1–100; default 5) |
+| `SHARDS_AI_REQUESTS_PER_MINUTE` | No | Generated AI requests per requester/server-or-DM per minute (1–60; default 5) |
+| `SHARDS_AI_MAX_CONCURRENT` | No | Simultaneous direct AI generations per bot process (1–20; default 2) |
 | `SHARDS_USAGE_STORE_PATH` | No | Model usage metadata file path; defaults to `.data/usage.json` |
 
 The checked-in `.env.example` contains no credentials. Rotate a token immediately in the Discord Developer Portal if it is exposed.
@@ -133,7 +138,7 @@ This repository is a foundation, not a claim of feature completeness. Sensible n
 
 ## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. The [Terms of Service](TERMS_OF_SERVICE.md) and [Privacy Policy](PRIVACY_POLICY.md) are **drafts only**: complete their legal-entity, contact, jurisdiction, effective-date, deployment, and retention details and obtain legal review before publishing or relying on them. The project is licensed under MIT. The GitHub repository must be made public by an authorised maintainer before it is publicly discoverable as an open-source repository.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist and [SECURITY.md](SECURITY.md) for credential handling and vulnerability reporting. The [Terms of Service](TERMS_OF_SERVICE.md) and [Privacy Policy](PRIVACY_POLICY.md) are **drafts only**: complete their legal-entity, contact, jurisdiction, effective-date, deployment, and retention details and obtain legal review before publishing or relying on them. The project is licensed under MIT, and this GitHub repository is public.
 
 
 ## Task worker execution boundary

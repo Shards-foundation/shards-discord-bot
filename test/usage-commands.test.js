@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { handleInteraction } from '../src/commands.js';
 import { createTaskStore } from '../src/tasks.js';
 import { createUsageStore } from '../src/usage.js';
+import { createAiRequestLimiter } from '../src/ai-limiter.js';
 import { MessageFlags } from 'discord.js';
 
 const actorId = '123456789012345678';
@@ -45,7 +46,9 @@ async function tempDir(t) {
 
 test('/ai ask records server-reported usage and /usage summary displays private totals and real limits', async t => {
   const directory = await tempDir(t);
+  const taskStore = createTaskStore({ filePath: join(directory, 'tasks.json') });
   const usageStore = createUsageStore({ filePath: join(directory, 'usage.json') });
+  const aiLimiter = createAiRequestLimiter({ requestsPerMinute: 4, maxConcurrent: 2 });
   const client = {
     model: 'qwen3.5:4b',
     async chat() {
@@ -56,21 +59,23 @@ test('/ai ask records server-reported usage and /usage summary displays private 
     },
   };
   const ai = makeInteraction('ai', 'ask', { prompt: 'Explain an event log.' });
-  await handleInteraction(ai, { error() {} }, undefined, fetch, client, usageStore);
+  await handleInteraction(ai, { error() {} }, taskStore, fetch, client, usageStore, aiLimiter);
   assert.match(ai.replies[0].content, /A private answer/);
 
   const usage = makeInteraction('usage', 'summary');
-  await handleInteraction(usage, { error() {} }, undefined, fetch, client, usageStore);
+  await handleInteraction(usage, { error() {} }, taskStore, fetch, client, usageStore, aiLimiter);
   assert.equal(usage.deferPayload.flags, MessageFlags.Ephemeral);
   assert.match(usage.replies[0].content, /Prompt tokens: 17/);
   assert.match(usage.replies[0].content, /Generated tokens: 9/);
-  assert.match(usage.replies[0].content, /per-user rate limit: not configured/i);
+  assert.match(usage.replies[0].content, /4 requests\/minute per requester/i);
+  assert.match(usage.replies[0].content, /2 concurrent direct calls per process/i);
+  assert.match(usage.replies[0].content, /Active task limit: 5 queued\/running tasks per requester\/server/);
   assert.match(usage.replies[0].content, /research up to 6 rounds/);
 
   const dmAI = makeInteraction('ai', 'ask', { prompt: 'A direct-message prompt.' }, { guildId: null });
-  await handleInteraction(dmAI, { error() {} }, undefined, fetch, client, usageStore);
+  await handleInteraction(dmAI, { error() {} }, taskStore, fetch, client, usageStore, aiLimiter);
   const dmUsage = makeInteraction('usage', 'summary', {}, { guildId: null });
-  await handleInteraction(dmUsage, { error() {} }, undefined, fetch, client, usageStore);
+  await handleInteraction(dmUsage, { error() {} }, taskStore, fetch, client, usageStore, aiLimiter);
   assert.match(dmUsage.replies[0].content, /Prompt tokens: 17/);
 });
 

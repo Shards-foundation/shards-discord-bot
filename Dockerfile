@@ -2,7 +2,10 @@ FROM node:24.17.0-bookworm-slim
 
 ENV NODE_ENV=production \
     SHARDS_TASK_STORE_PATH=/data/tasks.json \
-    SHARDS_USAGE_STORE_PATH=/data/usage.json
+    SHARDS_USAGE_STORE_PATH=/data/usage.json \
+    SHARDS_MAX_ACTIVE_TASKS_PER_REQUESTER=5 \
+    SHARDS_AI_REQUESTS_PER_MINUTE=5 \
+    SHARDS_AI_MAX_CONCURRENT=2
 WORKDIR /app
 
 COPY package.json package-lock.json ./

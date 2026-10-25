@@ -122,6 +122,40 @@ test('failed tasks can be retried within the attempt limit and audit events are 
   await assert.rejects(store.retry(task.id, otherUserId, { guildId }), /Not authorised/);
 });
 
+test('active task caps provide requester-scoped backpressure without breaking idempotency', async t => {
+  const { store } = await withStore(t, { maxActiveTasksPerRequester: 2 });
+  const firstInput = { requesterId, guildId, request: 'First queued task', idempotencyKey: 'active-cap-first-001' };
+  const first = await store.submit(firstInput);
+  const second = await store.submit({ ...firstInput, request: 'Second queued task', idempotencyKey: 'active-cap-second-01' });
+  assert.equal((await store.submit(firstInput)).id, first.id);
+  await assert.rejects(
+    store.submit({ ...firstInput, request: 'Third queued task', idempotencyKey: 'active-cap-third-001' }),
+    error => error.code === 'TASK_ACTIVE_LIMIT' && error.limit === 2,
+  );
+
+  const otherRequester = await store.submit({ requesterId: otherUserId, guildId, request: 'Other member task', idempotencyKey: 'active-cap-other-001' });
+  const otherGuild = await store.submit({ requesterId, guildId: '423456789012345678', request: 'Different server task', idempotencyKey: 'active-cap-guild-001' });
+  assert.equal(otherRequester.state, 'queued');
+  assert.equal(otherGuild.state, 'queued');
+
+  await store.cancel(first.id, requesterId, { guildId });
+  const replacement = await store.submit({ ...firstInput, request: 'Replacement task', idempotencyKey: 'active-cap-replace-01' });
+  assert.equal(replacement.state, 'queued');
+  assert.equal(second.state, 'queued');
+});
+
+test('retry cannot bypass the active task cap', async t => {
+  const { store } = await withStore(t, { maxActiveTasksPerRequester: 1 });
+  const failedTask = await store.submit({ requesterId, guildId, request: 'Will fail', idempotencyKey: 'active-cap-failed-001' });
+  await store.claimNext('active-cap-worker');
+  await store.finish(failedTask.id, 'active-cap-worker', { failureCode: 'OLLAMA_EXECUTION_FAILED' });
+  await store.submit({ requesterId, guildId, request: 'Already active', idempotencyKey: 'active-cap-live-0001' });
+  await assert.rejects(
+    store.retry(failedTask.id, requesterId, { guildId }),
+    error => error.code === 'TASK_ACTIVE_LIMIT' && error.limit === 1,
+  );
+});
+
 test('corrupt task data fails closed instead of silently overwriting it', async t => {
   const { filePath, store } = await withStore(t);
   await mkdir(dirname(filePath), { recursive: true });

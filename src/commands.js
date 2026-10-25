@@ -175,6 +175,23 @@ function formatStatus(client) {
   ].join('\n');
 }
 
+const DISCORD_SAFE_CONTENT_LIMIT = 1_900;
+const DISCORD_TRUNCATION_NOTICE = '\n\n[Output truncated to fit Discord. Request a shorter result for the complete answer.]';
+
+function boundDiscordContent(content) {
+  const text = String(content ?? '');
+  if (text.length <= DISCORD_SAFE_CONTENT_LIMIT) return text;
+  let prefixLength = DISCORD_SAFE_CONTENT_LIMIT - DISCORD_TRUNCATION_NOTICE.length;
+  const finalCodeUnit = text.charCodeAt(prefixLength - 1);
+  if (finalCodeUnit >= 0xD800 && finalCodeUnit <= 0xDBFF) prefixLength -= 1;
+  return text.slice(0, prefixLength) + DISCORD_TRUNCATION_NOTICE;
+}
+
+function activeTaskLimitMessage(error) {
+  const limit = Number.isInteger(error?.limit) ? error.limit : 'configured';
+  return `You have reached the active task limit (${limit}) for this server. Wait for a running task to finish or cancel a queued task before adding more.`;
+}
+
 async function recordAIUsage(usageStore, interaction, answer, source, logger) {
   if (!usageStore || typeof usageStore.record !== 'function') return;
   try {
@@ -192,36 +209,56 @@ async function recordAIUsage(usageStore, interaction, answer, source, logger) {
   }
 }
 
-async function handleAICommand(interaction, ollamaClient, usageStore, logger) {
+async function handleAICommand(interaction, ollamaClient, usageStore, logger, aiLimiter) {
   const subcommand = interaction.options.getSubcommand();
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  let content;
+  let permit;
   if (subcommand === 'ask' || subcommand === 'research') {
-    const prompt = interaction.options.getString('prompt', true);
-    const answer = subcommand === 'research' ? await ollamaClient.research(prompt) : await ollamaClient.chat(prompt);
-    await recordAIUsage(usageStore, interaction, answer, subcommand === 'research' ? 'ai_research' : 'ai_chat', logger);
-    const responseText = answer.content.length > 1_750 ? answer.content.slice(0, 1_730) + '\n\n[Response truncated for Discord.]' : answer.content;
-    const seconds = answer.totalDurationNs == null ? 'research tools: ' + (answer.toolCallsUsed ?? 0) : (answer.totalDurationNs / 1e9).toFixed(1) + 's';
-    content = '**Shards AI · ' + answer.model + ' · ' + seconds + '**\n' + responseText;
-  } else {
-    const models = await ollamaClient.listModels();
-    const installed = models.some(item => item.name === ollamaClient.model
-      || (!ollamaClient.model.includes(':') && item.name.split(':')[0] === ollamaClient.model));
-    if (subcommand === 'status') {
-      content = [
-        'Ollama API: reachable',
-        'Configured model: ' + ollamaClient.model,
-        'Model installed: ' + (installed ? 'yes' : 'no'),
-        'Available models: ' + models.length,
-        ...(installed ? [] : ['Install it with: ollama pull ' + ollamaClient.model]),
-      ].join('\n');
-    } else {
-      content = models.length
-        ? '**Ollama models (' + models.length + ')**\n' + models.map(item => '• ' + item.name + (item.size ? ' · ' + (item.size / 1e9).toFixed(1) + ' GB' : '')).join('\n')
-        : 'Ollama is reachable, but no models are installed. Install the configured model first.';
+    if (!aiLimiter || typeof aiLimiter.tryAcquire !== 'function') throw new Error('AI request limiter is unavailable.');
+    const key = `${interaction.guildId ?? 'dm'}:${interaction.user.id}`;
+    permit = aiLimiter.tryAcquire(key, {
+      requesterKey: interaction.user.id,
+      scopeKey: interaction.guildId ?? `dm:${interaction.user.id}`,
+    });
+    if (!permit.allowed) {
+      const requestScope = interaction.guildId ? 'in this server' : 'in this DM';
+      const content = permit.reason === 'rate_limit'
+        ? `AI request limit reached. You can make ${aiLimiter.limits.requestsPerMinute} generated requests per minute ${requestScope}. Try again in ${Math.max(1, Math.ceil(permit.retryAfterMs / 1_000))} seconds.`
+        : 'Shards AI is at its current processing capacity. Try again shortly.';
+      await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      return;
     }
   }
-  await interaction.editReply({ content: content.slice(0, 1_950), allowedMentions: { parse: [] } });
+  try {
+    let content;
+    if (subcommand === 'ask' || subcommand === 'research') {
+      const prompt = interaction.options.getString('prompt', true);
+      const answer = subcommand === 'research' ? await ollamaClient.research(prompt) : await ollamaClient.chat(prompt);
+      await recordAIUsage(usageStore, interaction, answer, subcommand === 'research' ? 'ai_research' : 'ai_chat', logger);
+      const seconds = answer.totalDurationNs == null ? 'research tools: ' + (answer.toolCallsUsed ?? 0) : (answer.totalDurationNs / 1e9).toFixed(1) + 's';
+      content = '**Shards AI · ' + answer.model + ' · ' + seconds + '**\n' + answer.content;
+    } else {
+      const models = await ollamaClient.listModels();
+      const installed = models.some(item => item.name === ollamaClient.model
+        || (!ollamaClient.model.includes(':') && item.name.split(':')[0] === ollamaClient.model));
+      if (subcommand === 'status') {
+        content = [
+          'Ollama API: reachable',
+          'Configured model: ' + ollamaClient.model,
+          'Model installed: ' + (installed ? 'yes' : 'no'),
+          'Available models: ' + models.length,
+          ...(installed ? [] : ['Install it with: ollama pull ' + ollamaClient.model]),
+        ].join('\n');
+      } else {
+        content = models.length
+          ? '**Ollama models (' + models.length + ')**\n' + models.map(item => '• ' + item.name + (item.size ? ' · ' + (item.size / 1e9).toFixed(1) + ' GB' : '')).join('\n')
+          : 'Ollama is reachable, but no models are installed. Install the configured model first.';
+      }
+    }
+    await interaction.editReply({ content: boundDiscordContent(content), allowedMentions: { parse: [] } });
+  } finally {
+    permit?.release();
+  }
 }
 
 async function handleTaskCommand(interaction, taskStore) {
@@ -233,14 +270,19 @@ async function handleTaskCommand(interaction, taskStore) {
   const subcommand = interaction.options.getSubcommand();
   let content;
   if (subcommand === 'submit' || subcommand === 'research') {
-    const task = await taskStore.submit({
-      requesterId: interaction.user.id,
-      guildId: interaction.guildId,
-      request: interaction.options.getString('request', true),
-      idempotencyKey: interaction.id,
-      mode: subcommand === 'research' ? 'github_research' : 'chat',
-    });
-    content = `Task ${task.id} was saved to the durable queue (mode: ${task.mode ?? 'chat'}, status: ${task.state}). The local Qwen worker will process it when the required service is available. Check /task status for the result.`;
+    try {
+      const task = await taskStore.submit({
+        requesterId: interaction.user.id,
+        guildId: interaction.guildId,
+        request: interaction.options.getString('request', true),
+        idempotencyKey: interaction.id,
+        mode: subcommand === 'research' ? 'github_research' : 'chat',
+      });
+      content = `Task ${task.id} was saved to the durable queue (mode: ${task.mode ?? 'chat'}, status: ${task.state}). The local Qwen worker will process it when the required service is available. Check /task status for the result.`;
+    } catch (error) {
+      if (error?.code !== 'TASK_ACTIVE_LIMIT') throw error;
+      content = activeTaskLimitMessage(error);
+    }
   } else {
     const taskId = interaction.options.getString('task_id', true);
     if (subcommand === 'status') {
@@ -252,8 +294,13 @@ async function handleTaskCommand(interaction, taskStore) {
       const task = await taskStore.cancel(taskId, interaction.user.id, { guildId: interaction.guildId });
       content = task ? `Task ${task.id} cancelled.` : 'Task not found or you are not authorised to cancel it.';
     } else if (subcommand === 'retry') {
-      const task = await taskStore.retry(taskId, interaction.user.id, { guildId: interaction.guildId });
-      content = task ? 'Task ' + task.id + ' requeued (status: ' + task.state + ', attempts used: ' + task.attempts + ').' : 'Task not found or you are not authorised to retry it.';
+      try {
+        const task = await taskStore.retry(taskId, interaction.user.id, { guildId: interaction.guildId });
+        content = task ? 'Task ' + task.id + ' requeued (status: ' + task.state + ', attempts used: ' + task.attempts + ').' : 'Task not found or you are not authorised to retry it.';
+      } catch (error) {
+        if (error?.code !== 'TASK_ACTIVE_LIMIT') throw error;
+        content = activeTaskLimitMessage(error);
+      }
     } else if (subcommand === 'events') {
       const events = await taskStore.events(taskId, interaction.user.id, { guildId: interaction.guildId });
       content = events ? (events.length ? '**Task audit history (' + events.length + ')**\n' + events.slice(-10).map(event => '• ' + event.at + ' — ' + event.action).join('\n') : 'No audit events recorded.') : 'Task not found or you are not authorised to view its audit history.';
@@ -261,10 +308,10 @@ async function handleTaskCommand(interaction, taskStore) {
       content = 'Unsupported task operation.';
     }
   }
-  await interaction.editReply({ content, allowedMentions: { parse: [] } });
+  await interaction.editReply({ content: boundDiscordContent(content), allowedMentions: { parse: [] } });
 }
 
-async function handleUsageCommand(interaction, usageStore) {
+async function handleUsageCommand(interaction, usageStore, aiLimiter, taskStore) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   if (!usageStore) throw new Error('Usage store is unavailable.');
   const usage = await usageStore.summary(interaction.user.id, interaction.guildId ?? null);
@@ -274,6 +321,9 @@ async function handleUsageCommand(interaction, usageStore) {
       + (modelEntries.length > 8 ? `, +${modelEntries.length - 8} more` : '')
     : 'none recorded';
   const timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS || 120_000);
+  const aiLimits = aiLimiter?.limits;
+  const activeTaskLimit = Number.isInteger(taskStore?.maxActiveTasksPerRequester)
+    ? taskStore.maxActiveTasksPerRequester : 'not configured';
   const content = [
     `Successful model requests recorded: ${usage.requests}`,
     `Requests with token metrics: ${usage.measuredRequests}/${usage.requests}`,
@@ -281,13 +331,15 @@ async function handleUsageCommand(interaction, usageStore) {
     `Generated tokens: ${usage.completionTokens}`,
     `Model processing time: ${(usage.durationNs / 1e9).toFixed(1)} s`,
     `Models: ${models}`,
-    'Application-level per-user rate limit: not configured.',
+    `AI generation limits: ${aiLimits ? `${aiLimits.requestsPerMinute} requests/minute per requester/server-or-DM; ${aiLimits.maxConcurrent} concurrent direct calls per process; at most ${aiLimits.maxConcurrentPerRequester} per requester and ${aiLimits.maxConcurrentPerScope} per server/DM scope` : 'not configured for this runtime'}.`,
+    `Active task limit: ${activeTaskLimit} queued/running tasks per requester/server.`,
+    ...(aiLimits ? ['AI limit state is process-local; it resets on restart and is not shared across replicas.'] : []),
     'Execution bounds: 3,000-character AI prompt; 512 generated tokens per chat; research up to 6 rounds and 5 public-GitHub tool calls (700 tokens per round).',
-    `Task worker: one task at a time; Ollama timeout ${timeoutMs} ms. Direct AI commands are not rate-limited by the application.`,
+    `Task worker: one task at a time; Ollama timeout ${timeoutMs} ms. Direct model calls are subject to the generation limits above.`,
     'Token and duration values are reported by Ollama; failed/partial calls may not be included. Local inference has no model API bill; host and electricity costs still apply.',
     ...(usage.historyTruncated ? ['Older usage records were removed after the 20,000-record storage limit.'] : []),
   ].join('\n');
-  await interaction.editReply({ content, allowedMentions: { parse: [] } });
+  await interaction.editReply({ content: boundDiscordContent(content), allowedMentions: { parse: [] } });
 }
 
 async function handleAuditCommand(interaction, taskStore) {
@@ -304,7 +356,7 @@ async function handleAuditCommand(interaction, taskStore) {
       ? `**Task lifecycle audit (${events.length} events)**\n${events.slice(-15).map(event => `• ${event.at} — ${event.action}`).join('\n')}\nPolicy decisions are not yet recorded by this version.`
       : 'No lifecycle events are recorded for this task.')
     : 'Task not found or you are not authorised to view its audit history.';
-  await interaction.editReply({ content, allowedMentions: { parse: [] } });
+  await interaction.editReply({ content: boundDiscordContent(content), allowedMentions: { parse: [] } });
 }
 
 const HELP_TEXT = [
@@ -320,7 +372,7 @@ const HELP_TEXT = [
   '`/ai ask prompt` — send a prompt to the configured Qwen model through Ollama',
   '`/ai research prompt` — Qwen-assisted, read-only public GitHub research with a bounded tool loop',
   '`/ai status` and `/ai models` — check Ollama and installed models',
-  '`/usage summary` — review your token consumption and configured budgets; no per-user rate limit is enabled',
+  '`/usage summary` — review your token consumption, request limits, and task queue limits',
   '`/audit task task_id` — inspect lifecycle events for your own task; policy decisions are not yet recorded',
   '`/help` — this command list',
 ].join('\n');
@@ -373,7 +425,7 @@ function chooseOption(raw) {
   return { value: options[randomInt(options.length)] };
 }
 
-export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient(), usageStore) {
+export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient(), usageStore, aiLimiter) {
   if (!interaction.isChatInputCommand()) return;
   const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task', 'usage', 'audit'].includes(interaction.commandName);
   if (!supported) return;
@@ -401,17 +453,17 @@ export async function handleInteraction(interaction, logger = console, taskStore
       if (interaction.options.getSubcommand() !== 'repo') return;
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await lookupPublicRepository(interaction.options.getString('repository', true), fetchImpl);
-      await interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
+      await interaction.editReply({ content: boundDiscordContent(result.content), allowedMentions: { parse: [] } });
       return;
     } else if (interaction.commandName === 'task') {
       if (!taskStore) throw new Error('Task store is unavailable.');
       await handleTaskCommand(interaction, taskStore);
       return;
     } else if (interaction.commandName === 'ai') {
-      await handleAICommand(interaction, ollamaClient, usageStore, logger);
+      await handleAICommand(interaction, ollamaClient, usageStore, logger, aiLimiter);
       return;
     } else if (interaction.commandName === 'usage') {
-      await handleUsageCommand(interaction, usageStore);
+      await handleUsageCommand(interaction, usageStore, aiLimiter, taskStore);
       return;
     } else if (interaction.commandName === 'audit') {
       await handleAuditCommand(interaction, taskStore);
@@ -421,7 +473,7 @@ export async function handleInteraction(interaction, logger = console, taskStore
     } else {
       return;
     }
-    await interaction.reply({ content, allowedMentions: { parse: [] } });
+    await interaction.reply({ content: boundDiscordContent(content), allowedMentions: { parse: [] } });
   } catch {
     // Never log raw Discord errors: request metadata may contain credentials.
     logger.error('Slash command failed.');
