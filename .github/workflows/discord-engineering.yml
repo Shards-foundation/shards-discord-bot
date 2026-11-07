@@ -20,4 +20,10 @@ jobs:
       - name: Notify Discord when configured
         env:
           SHARDS_DISCORD_WEBHOOK: ${{ secrets.SHARDS_DISCORD_ENGINEERING_WEBHOOK }}
-        run: node scripts/notify-discord.mjs
+        shell: bash
+        run: |
+          if [[ ! -f scripts/notify-discord.mjs ]]; then
+            echo "Notifier not yet installed on default branch; skipping."
+            exit 0
+          fi
+          node scripts/notify-discord.mjs
