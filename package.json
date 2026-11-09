@@ -18,7 +18,7 @@
     "smoke:live": "node --env-file-if-exists=.env scripts/smoke-live.js"
   },
   "dependencies": {
-    "discord.js": "14.27.0"
+    "discord.js": "14.28.1"
   },
   "repository": {
     "type": "git",
