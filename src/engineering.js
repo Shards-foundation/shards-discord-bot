@@ -42,7 +42,7 @@ async function freshSnapshot(project, fetchImpl) {
     for (const pr of items) {
       lines.push('• #' + pr.number + (pr.draft === true ? ' (draft)' : '') + ' — ' + root + '/pull/' + pr.number);
     }
-    if (pullData.length > items.length) lines.push('Other open PRs may exist; showing up to five.');
+    if (pullData.length >= 5) lines.push('Other open PRs may exist; showing up to five.');
   } else {
     lines.push('PR data: unavailable or GitHub API rate-limited');
   }
