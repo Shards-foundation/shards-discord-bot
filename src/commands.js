@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { createOllamaClient } from './ollama.js';
+import { PUBLIC_SHARDS_PROJECTS, getShardsEngineeringSnapshot } from './engineering.js';
 import { ApplicationCommandOptionType, ApplicationCommandType, MessageFlags } from 'discord.js';
 
 export const commands = [
@@ -25,6 +26,23 @@ export const commands = [
         description: 'Repository in owner/name format.',
         required: true,
         max_length: 140,
+      }],
+    }],
+  },
+  {
+    name: 'shards',
+    description: 'Shards public engineering operations (read only).',
+    type: ApplicationCommandType.ChatInput,
+    options: [{
+      type: ApplicationCommandOptionType.Subcommand,
+      name: 'engineering',
+      description: 'Inspect open pull requests and main-branch workflow status.',
+      options: [{
+        type: ApplicationCommandOptionType.String,
+        name: 'project',
+        description: 'Choose a public Shards repository.',
+        required: true,
+        choices: PUBLIC_SHARDS_PROJECTS.map(value => ({ name: value, value })),
       }],
     }],
   },
@@ -369,6 +387,7 @@ const HELP_TEXT = [
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
   '`/github repo owner/name` — public GitHub repository metadata',
+  '`/shards engineering project` — latest open Shards PRs and main-branch workflow result (read-only; no Qwen required)',
   '`/ai ask prompt` — send a prompt to the configured Qwen model through Ollama',
   '`/ai research prompt` — Qwen-assisted, read-only public GitHub research with a bounded tool loop',
   '`/ai status` and `/ai models` — check Ollama and installed models',
@@ -427,7 +446,7 @@ function chooseOption(raw) {
 
 export async function handleInteraction(interaction, logger = console, taskStore, fetchImpl = fetch, ollamaClient = createOllamaClient(), usageStore, aiLimiter) {
   if (!interaction.isChatInputCommand()) return;
-  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'ai', 'system', 'task', 'usage', 'audit'].includes(interaction.commandName);
+  const supported = ['ping', 'hello', 'help', 'roll', 'choose', 'coinflip', 'github', 'shards', 'ai', 'system', 'task', 'usage', 'audit'].includes(interaction.commandName);
   if (!supported) return;
   try {
     let content;
@@ -453,6 +472,12 @@ export async function handleInteraction(interaction, logger = console, taskStore
       if (interaction.options.getSubcommand() !== 'repo') return;
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await lookupPublicRepository(interaction.options.getString('repository', true), fetchImpl);
+      await interaction.editReply({ content: boundDiscordContent(result.content), allowedMentions: { parse: [] } });
+      return;
+    } else if (interaction.commandName === 'shards') {
+      if (interaction.options.getSubcommand() !== 'engineering') return;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const result = await getShardsEngineeringSnapshot(interaction.options.getString('project', true), fetchImpl);
       await interaction.editReply({ content: boundDiscordContent(result.content), allowedMentions: { parse: [] } });
       return;
     } else if (interaction.commandName === 'task') {

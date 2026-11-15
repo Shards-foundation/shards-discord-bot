@@ -65,6 +65,12 @@ For the evidence-backed quality checklist, repository findings, and deferred pri
 - `/choose options` — randomly chooses from 2–20 comma-separated options; the input is bounded and empty entries are ignored.
 - `/coinflip` — returns heads or tails.
 - `/github repo repository` — looks up a public repository by `owner/name`, returning description, stars, forks, open issues and primary language. The request is fixed to GitHub's public API, uses a five-second timeout, and does not require a token.
+- `/shards engineering project` — inspect the five newest open PRs and latest main-branch GitHub Actions workflow
+  for an allowlisted **public** Shards project (`shards-discord-bot`, `Shards-kernel`, or `Shards-MCP`).
+  This command operates without Qwen, an AI API key, or GitHub write privileges, but the Discord bot process
+  must be online. Replies are private, scoped to read-only GitHub metadata, and cache live lookups for 60 seconds
+  to reduce unauthenticated API pressure. Private repositories (including `shards-github-agent`) are excluded
+  until authenticated least-privilege access exists.
 - `/ai ask prompt` — runs a real inference request against the configured Ollama model and privately returns the response.
 - `/ai research prompt` — lets Qwen call a bounded set of read-only public GitHub tools (repository search, repository metadata, and public text-file reads) before producing a source-linked summary.
 - `/ai status` — checks API reachability and whether the configured model is installed.
