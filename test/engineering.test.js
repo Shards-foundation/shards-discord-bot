@@ -69,3 +69,11 @@ test('malformed workflow states and PR IDs are not echoed into Discord', async (
   assert.doesNotMatch(result.content, /@everyone|compromised/);
   assert.doesNotMatch(result.content, /\/pull\/1/);
 });
+
+test('a full PR page notes that additional open requests may exist', async () => {
+  const result = await getShardsEngineeringSnapshot('Shards-kernel', async url => {
+    if (url.includes('/pulls?')) return good([1, 2, 3, 4, 5].map(number => ({ number, draft: false })));
+    return good({ workflow_runs: [] });
+  });
+  assert.match(result.content, /Other open PRs may exist/);
+});
