@@ -47,7 +47,7 @@ test('preview config needs no token but rejects invalid IDs', () => {
 });
 test('registration payload exposes the full supported command set', () => {
   assert.deepEqual(commands.map(c => ({ name: c.name, type: c.type })), [
-    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'ai', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 }, { name: 'usage', type: 1 }, { name: 'audit', type: 1 },
+    { name: 'ping', type: 1 }, { name: 'hello', type: 1 }, { name: 'help', type: 1 }, { name: 'roll', type: 1 }, { name: 'choose', type: 1 }, { name: 'coinflip', type: 1 }, { name: 'github', type: 1 }, { name: 'shards', type: 1 }, { name: 'ai', type: 1 }, { name: 'system', type: 1 }, { name: 'task', type: 1 }, { name: 'usage', type: 1 }, { name: 'audit', type: 1 },
   ]);
   for (const command of commands) assert.ok(command.description.length > 0);
   assert.equal(commands.find(c => c.name === 'roll').options[0].min_value, 2);
