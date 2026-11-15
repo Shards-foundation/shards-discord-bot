@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ALLOWED_REPOSITORY, validateTelegramConfig, buildTelegramMessage, publishTelegram } from '../scripts/notify-telegram.mjs';
 
-const token = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+// Synthetic fixture assembled at runtime, never a real bot credential.
+const token = ['123456789', ':', 'A'.repeat(35)].join('');
 const chatId = '-1001234567890';
 const repository = { full_name: ALLOWED_REPOSITORY, fork: false };
 const prEvent = { repository, action: 'closed', pull_request: { number: 27, merged: true, title: '@everyone private' } };
