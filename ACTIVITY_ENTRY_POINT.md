@@ -57,8 +57,11 @@ do not use a Cloudflare Worker or the Activity URL as an Interactions Endpoint.
 Discord handles launch itself; Hermes does not need to reply to this Entry
 Point. This does not repair Hermes's missing command responses.
 
-Test the Activity inside a small private development server or eligible DM
-according to Discord's current development restrictions. Do not modify or
-replace any previously registered command to enable an Activity.
+This Entry Point is restricted to guilds (contexts [0]), not DMs.
+Test it in a small private development server with fewer than 25 members
+while the application remains unverified. The existing 402-member server
+is not a suitable unverified Activity test environment.
+
+Do not modify or replace previously registered commands to enable an Activity.
 
 Source: https://docs.discord.com/developers/interactions/application-commands
