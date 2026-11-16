@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Script } from 'node:vm';
-import worker, { engineeringSnapshot, cachedEngineering, vendorUpstreamFor } from '../worker.mjs';
+import worker, { engineeringSnapshot, cachedEngineering } from '../worker.mjs';
 import { PAGE_HTML, PAGE_CSS } from '../ui.mjs';
 import { CLIENT_JS } from '../client.mjs';
 
@@ -111,14 +111,29 @@ test('client code is syntactically valid and has no dynamic external tool execut
   assert.ok(!CLIENT_JS.includes('localStorage'));
 });
 
-test('Discord SDK requests are served from the same origin and proxy paths are constrained', () => {
-  assert.equal(vendorUpstreamFor('/sdk.js'), 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
-  assert.equal(vendorUpstreamFor('/npm/zod@3.25.0/+esm'), 'https://cdn.jsdelivr.net/npm/zod@3.25.0/+esm');
-  assert.equal(vendorUpstreamFor('/npm/@discord/embedded-app-sdk@2.5.0/+esm'), 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
-  assert.equal(vendorUpstreamFor('/npm/example@1.0.0/private'), null);
-  assert.equal(vendorUpstreamFor('/npm/%2e%2e/secrets'), null);
-  assert.equal(vendorUpstreamFor('/api/health'), null);
-  assert.equal(vendorUpstreamFor('//evil.test/'), null);
+test('pinned SDK is served from same-origin KV without dynamic third-party proxy', async () => {
+  const bundle = 'export const DiscordSDK = function() {}; // ' + 'x'.repeat(150000);
+  let reads = 0;
+  const env = { ENGINEERING_CACHE: {
+    get: async (key, type) => {
+      reads += 1;
+      assert.equal(key, 'discord-sdk-v250');
+      assert.equal(type, 'text');
+      return bundle;
+    },
+  } };
+  const result = await worker.fetch(new Request('https://activity.shardsinc.co.uk/sdk.js'), env);
+  assert.equal(result.status, 200);
+  assert.ok(result.headers.get('content-type').includes('javascript'));
+  assert.equal(await result.text(), bundle);
+  assert.equal(reads,1);
+  const head = await worker.fetch(new Request('https://activity.shardsinc.co.uk/sdk.js', { method:'HEAD' }), env);
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
+  const invalid = await worker.fetch(new Request('https://activity.shardsinc.co.uk/npm/zod@3.25.0/+esm'), env);
+  assert.equal(invalid.status,404);
+  const missing = await worker.fetch(new Request('https://activity.shardsinc.co.uk/sdk.js'));
+  assert.equal(missing.status,503);
   assert.ok(!CLIENT_JS.includes("import('https://cdn.jsdelivr.net"));
   assert.ok(CLIENT_JS.includes("import('/sdk.js')"));
 });
