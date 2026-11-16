@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Routes } from 'discord.js'
 import {
   ACTIVITY_ENTRY_POINT, ensureActivityEntryPoint, parseEntryPointArgs
-} from '../src/activity-entry-point.js'
+} from '../.github/scripts/activity-entry-point.js'
 
 const APP_ID = '1562965805413568532'
 const existing = [
