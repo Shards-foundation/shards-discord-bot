@@ -1,0 +1,90 @@
+name: Shards Activity Verification
+on:
+  pull_request:
+    paths:
+      - 'activity/**'
+      - '.github/workflows/activity-verify.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  activity-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout read-only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate source and run offline tests
+        shell: bash
+        run: |
+          node --check activity/worker.mjs
+          node --check activity/ui.mjs
+          node --check activity/client.mjs
+          node --test activity/test/activity.test.mjs
+      - name: Informational production SDK probe (not PR source validation)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        shell: bash
+        run: |
+          node --input-type=module <<'EOF'
+          import { createHash } from 'node:crypto';
+          const root = 'https://activity.shardsinc.co.uk';
+          const sdk = await fetch(root + '/sdk.js', { signal: AbortSignal.timeout(12000) });
+          const body = await sdk.text();
+          console.log('Deployed SDK status', sdk.status, sdk.headers.get('content-type'), 'bytes', body.length);
+          if (!sdk.ok || !sdk.headers.get('content-type')?.includes('javascript')) {
+            throw new Error('Self-hosted SDK asset is not available');
+          }
+          const hash = createHash('sha256').update(body).digest('hex');
+          console.log('Deployed SDK SHA256', hash);
+          if (hash !== '675969a26b20973556721970db3e0201c902e53476c4176c71d80f42e989579d') {
+            throw new Error('Deployed SDK does not match verified v2.5.0');
+          }
+          const blocked = await fetch(root + '/npm/zod@3.25.0/+esm');
+          if (blocked.status !== 404) throw new Error('Old npm dynamic proxy route is unexpectedly enabled');
+          EOF
+      - name: Live HTTPS + Cloudflare Worker smoke
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          node --input-type=module <<'EOF'
+          const origin='https://activity.shardsinc.co.uk';
+          const targets=[
+            ['/', 'text/html'],
+            ['/styles.css', 'text/css'],
+            ['/app.js', 'javascript'],
+            ['/sdk.js', 'javascript'],
+            ['/api/health','application/json'],
+            ['/api/engineering','application/json']
+          ];
+          for(const [path,type] of targets){
+            let response;
+            let lastError;
+            for(let attempt=0;attempt<3;attempt++){
+              try {
+                response=await fetch(origin+path,{headers:{Accept:'application/json, text/html, */*'},signal:AbortSignal.timeout(10000)});
+                if(response.ok)break;
+                lastError=new Error('HTTP '+response.status+' for '+path);
+              } catch(err){lastError=err;}
+              if(attempt<2)await new Promise(resolve=>setTimeout(resolve,2000));
+            }
+            if(!response?.ok)throw lastError || new Error(path+' unreachable');
+            if(!response.headers.get('content-type')?.includes(type))throw new Error('Unexpected content type for '+path);
+            const content=await response.text();
+            if(path==='/api/health'){
+              const data=JSON.parse(content);
+              if(data.service!=='Shards Mission Control'||data.agent_execution!=='not_enabled')throw new Error('Incorrect health contract');
+            }
+            if(path==='/api/engineering'){
+              const data=JSON.parse(content);
+              if(data.schema!=='shards.activity.engineering.v1'||data.repositories?.length!==3)throw new Error('Incorrect engineering data contract');
+            }
+            if(path==='/'){
+              if(!content.includes('Shards Mission Control'))throw new Error('Missing Activity shell');
+              if(!response.headers.get('content-security-policy')?.includes('frame-ancestors'))throw new Error('Missing frame policy');
+            }
+            console.log('verified '+path+' ['+response.status+']');
+          }
+          EOF
