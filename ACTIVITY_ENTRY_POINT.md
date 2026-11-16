@@ -42,14 +42,14 @@ repository **Actions** tab as **Shards Discord Activity Entry Point (add only)**
 GitHub requires `workflow_dispatch` files to exist on the default branch.
 
 1. Save the bot token *only* as the GitHub Actions repository secret
-   `DISCORD_BOT_TOKEN`. Do not send it to ChatGPT or commit it.
+    `DISCORD_BOT_TOKEN`. Do not send it to ChatGPT or commit it.
 2. Manually run with `operation=check` to inspect the global registry
-   without modifying anything.
+    without modifying anything.
 3. If `check` reports `missing`, run again with `operation=add` and type
-   `PRESERVE-COMMANDS-ADD-ENTRYPOINT` in the confirmation field.
+    `PRESERVE-COMMANDS-ADD-ENTRYPOINT` in the confirmation field.
 4. The workflow verifies add-only unit tests and performs another read-only
-   check after the single-command creation. If the command is present,
-   conflicting, or the registry changed, the script refuses to write.
+    check after the single-command creation. If the command is present,
+    conflicting, or the registry changed, the script refuses to write.
 
 The workflow never runs on PRs or pushes. It operates on `main` only,
 has read-only GitHub permissions, and has no deletion or bulk-registration
