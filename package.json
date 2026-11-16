@@ -11,7 +11,10 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env src/index.js",
     "test": "node --test",
-    "check": "node --check src/config.js && node --check src/ai-limiter.js && node --check src/ollama.js && node --check src/usage.js && node --check src/commands.js && node --check src/registration.js && node --check src/tasks.js && node --check src/task-worker.js && node --check src/shutdown.js && node --check src/bot.js && node --check src/index.js && node --check scripts/register-commands.js && node --check scripts/smoke-ollama.js && node --check scripts/smoke-live.js",
+    "check": "node --check src/activity-entry-point.js && node --check scripts/ensure-activity-entry-point.js && node --check src/config.js && node --check src/ai-limiter.js && node --check src/ollama.js && node --check src/usage.js && node --check src/commands.js && node --check src/registration.js && node --check src/tasks.js && node --check src/task-worker.js && node --check src/shutdown.js && node --check src/bot.js && node --check src/index.js && node --check scripts/register-commands.js && node --check scripts/smoke-ollama.js && node --check scripts/smoke-live.js",
+    "activity:entry:preview": "node --env-file-if-exists=.env scripts/ensure-activity-entry-point.js",
+    "activity:entry:check": "node --env-file-if-exists=.env scripts/ensure-activity-entry-point.js --check",
+    "activity:entry:add": "node --env-file-if-exists=.env scripts/ensure-activity-entry-point.js --apply --confirm-add-only",
     "commands:preview": "node scripts/register-commands.js",
     "commands:register": "node --env-file-if-exists=.env scripts/register-commands.js",
     "smoke:ollama": "node --env-file-if-exists=.env scripts/smoke-ollama.js",
