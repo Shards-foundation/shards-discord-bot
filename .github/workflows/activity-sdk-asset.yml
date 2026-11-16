@@ -1,0 +1,46 @@
+name: Build Discord Activity SDK Asset
+on:
+  pull_request:
+    paths:
+      - 'activity/**'
+      - '.github/workflows/activity-sdk-asset.yml'
+permissions:
+  contents: read
+jobs:
+  build-vendor-sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Build pinned first-party SDK with esbuild
+        shell: bash
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund @discord/embedded-app-sdk@2.5.0 esbuild@0.25.6
+          mkdir -p activity/vendor
+          printf "export { DiscordSDK } from '@discord/embedded-app-sdk';\n" > activity/vendor-entry.mjs
+          ./node_modules/.bin/esbuild activity/vendor-entry.mjs --bundle --platform=browser --format=esm --target=es2022 --minify --outfile=activity/vendor/discord-sdk.mjs
+          node --check activity/vendor/discord-sdk.mjs
+          node --input-type=module <<'EOF'
+          import { stat, readFile } from 'node:fs/promises';
+          import { createHash } from 'node:crypto';
+          const path='activity/vendor/discord-sdk.mjs';
+          const statResult=await stat(path);
+          if(statResult.size < 1000 || statResult.size > 2000000)throw Error('Unexpected SDK bundle size');
+          const body=await readFile(path);
+          const sha=createHash('sha256').update(body).digest('hex');
+          console.log('Discord SDK v2.5.0 bundle bytes',statResult.size,'sha256',sha);
+          EOF
+      - name: Upload immutable SDK bundle for source inclusion
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: shards-discord-sdk-v250
+          path: activity/vendor/discord-sdk.mjs
+          retention-days: 3
+          if-no-files-found: error
