@@ -12,9 +12,9 @@ A self-contained read-only web Activity deployed to Cloudflare Workers. It is ho
 
 ## Current functionality
 
-The Activity provides a responsive mission-control interface, public GitHub engineering summaries for a fixed allowlist (`shards-discord-bot`, `Shards-kernel`, `Shards-MCP`), recent public workflow runs, search and filtering, manual refresh and source links. Data is fetched server-side from the GitHub public REST API with short-lived Cloudflare caching. Missing upstream data is labelled unavailable rather than healthy.
+The Activity provides a responsive mission-control interface, public GitHub engineering summaries for a fixed allowlist (`shards-discord-bot`, `Shards-kernel`, `Shards-MCP`), recent public workflow runs, search and filtering, manual refresh and source links. Data is fetched server-side from the GitHub public REST API with 30-minute Cloudflare upstream caching. Missing upstream data is labelled unavailable rather than healthy. Public metrics may be up to 30 minutes stale; the UI discloses this.
 
-Discord Embed SDK 2.5.0 is attempted **only when launched in an iframe/Discord context**, via a pinned URL. `discordSdk.ready()` proves the iframe handshake, not user identity. No OAuth scopes, client secret, bot token, password, privileged Discord intent, interactive bot runtime or task execution are used. In a normal browser, the UI explicitly labels itself as browser preview.
+Discord Embed SDK 2.5.0 is attempted **only when launched in an iframe/Discord context**, via a pinned SDK version served through the Worker's same-origin SDK proxy. `discordSdk.ready()` proves the iframe handshake, not user identity. No OAuth scopes, client secret, bot token, password, privileged Discord intent, interactive bot runtime or task execution are used. In a normal browser, the UI explicitly labels itself as browser preview.
 
 **The Discord portal mapping and Activities toggle are not configurable through the GitHub or Cloudflare connection.** They must be saved in the developer portal for this Discord application after deployment verification.
 
@@ -27,7 +27,7 @@ Discord Embed SDK 2.5.0 is attempted **only when launched in an iframe/Discord c
 - PR titles and descriptions never reach the browser. UI inserts source-derived text through `textContent`, not `innerHTML`.
 - Content Security Policy restricts scripts, styles and framing; no personal data is persisted.
 - Agent status is **not connected** until the relevant authenticated health endpoints have been integrated.
-- External CDN dependency for Discord SDK remains a production dependency; bundle first-party SDK locally before relying on authenticated Discord features. CSP deliberately allows only jsDelivr for this dependency.
+- The SDK is served under /sdk.js, and nested version-pinned npm modules are proxied through the same Cloudflare origin. Discord therefore makes no unmapped CDN request. The upstream CDN remains a third-party runtime dependency; vendor a reviewed build-time bundle before adding authenticated functionality. CSP permits same-origin scripts only.
 
 ## Test
 
