@@ -55,9 +55,9 @@ export async function ensureActivityEntryPoint (rest, appId, { mode = 'check' } 
   // Re-read immediately before a write to catch concurrent command edits.
   const confirm = await rest.get(route)
   if (!Array.isArray(confirm) ||
-     confirm.length !== current.length ||
-     confirm.some(command => command?.type === 4 ||
-       command?.name?.toLowerCase() === ACTIVITY_ENTRY_POINT.name)) {
+    confirm.length !== current.length ||
+    confirm.some(command => command?.type === 4 ||
+      command?.name?.toLowerCase() === ACTIVITY_ENTRY_POINT.name)) {
     throw new Error('Remote command listing changed; no write attempted.')
   }
   const original = current.map(x => x?.id).sort()
