@@ -5,6 +5,16 @@ on:
   push:
     branches:
       - main
+    # Only deploy when bot runtime or its container/dependency inputs change.
+    # CI, docs, tests and Activity-only edits must not restart Hermes.
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'compose.yaml'
+      - 'Dockerfile'
+      - '.dockerignore'
 
 permissions:
   contents: read
