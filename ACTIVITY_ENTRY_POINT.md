@@ -69,7 +69,10 @@ do not use a Cloudflare Worker or the Activity URL as an Interactions Endpoint.
 
 ## Entry Point contract
 
-- Name: `launch`
+The proposed Activity command is **`/start`**. If an existing global
+`/start` command is found, creation stops rather than modifying it.
+
+- Name: `start`
 - Type: `4` (PRIMARY_ENTRY_POINT)
 - Handler: `2` (DISCORD_LAUNCH_ACTIVITY)
 - Installation: `[0]` (guild)
