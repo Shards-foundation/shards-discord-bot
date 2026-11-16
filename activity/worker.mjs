@@ -7,10 +7,7 @@ const APP_NAME = 'Shards Mission Control';
 const CACHE_SECONDS = 3600;
 const CACHE_KEY = 'engineering-snapshot-v1';
 const CACHE_EXPIRATION_SECONDS = 86400;
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm';
-const CDN_BASE = 'https://cdn.jsdelivr.net';
-const CDN_PATH_PATTERN = /^\/npm\/(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@[a-z0-9._-]+\/\+esm$/i;
-
+const SDK_ASSET_KEY = 'discord-sdk-v250';
 const SECURITY_HEADERS = Object.freeze({
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
@@ -49,29 +46,20 @@ function safeString(value, max = 100) {
   return typeof value === 'string' ? value.slice(0, max) : '';
 }
 
-export function vendorUpstreamFor(pathname) {
-  if (pathname === '/sdk.js') return SDK_URL;
-  if (pathname.length <= 190 && CDN_PATH_PATTERN.test(pathname)) return CDN_BASE + pathname;
-  return null;
-}
-
-async function vendorModule(pathname, fetchImpl = fetch) {
-  const upstream = vendorUpstreamFor(pathname);
-  if (!upstream) return response('Not found', 'text/plain; charset=utf-8', 404);
+async function sdkAsset(request, env = {}) {
+  const store = env?.ENGINEERING_CACHE;
+  if (!store || typeof store.get !== 'function') {
+    return response('Discord SDK asset not configured', 'text/plain; charset=utf-8', 503);
+  }
   try {
-    const res = await fetchImpl(upstream, {
-      method: 'GET',
-      headers: { Accept: 'text/javascript' },
-      redirect: 'error',
-      signal: AbortSignal.timeout(9000),
-      cf: { cacheTtl: 86400, cacheEverything: true },
-    });
-    if (!res.ok) return response('SDK upstream HTTP ' + res.status, 'text/plain; charset=utf-8', 502);
-    const script = await res.text();
-    if (script.length > 3000000) return response('SDK dependency too large: ' + script.length, 'text/plain; charset=utf-8', 502);
-    return response(script, 'text/javascript; charset=utf-8', 200, 'public, max-age=86400');
-  } catch (error) {
-    return response('SDK upstream network exception: ' + (error instanceof Error ? error.name : 'unknown'), 'text/plain; charset=utf-8', 502);
+    const bundle = await store.get(SDK_ASSET_KEY, 'text');
+    if (typeof bundle !== 'string' || bundle.length < 100000 || bundle.length > 2000000) {
+      return response('Discord SDK asset unavailable', 'text/plain; charset=utf-8', 503);
+    }
+    return response(request.method === 'HEAD' ? null : bundle,
+      'text/javascript; charset=utf-8', 200, 'public, max-age=86400, immutable');
+  } catch {
+    return response('Discord SDK asset unavailable', 'text/plain; charset=utf-8', 503);
   }
 }
 
@@ -220,8 +208,8 @@ export default {
     if (url.pathname === '/api/engineering') {
       return json(await cachedEngineering(env));
     }
-    if (vendorUpstreamFor(url.pathname)) {
-      return vendorModule(url.pathname);
+    if (url.pathname === '/sdk.js') {
+      return sdkAsset(request, env);
     }
     if (url.pathname === '/app.js') {
       return response(request.method === 'HEAD' ? null : CLIENT_JS,
