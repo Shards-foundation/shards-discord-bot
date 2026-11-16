@@ -45,7 +45,7 @@ test('unsafe PR titles do not appear anywhere in the API response', async () => 
   const output = JSON.stringify(result);
   assert.ok(!output.includes('<script>'));
   assert.ok(!output.includes('@everyone'));
-  assert.match(output, /pull\\/31/);
+  assert.ok(output.includes('/pull/31'));
 });
 
 test('unverified GitHub responses are marked unavailable, never healthy', async () => {
@@ -69,7 +69,7 @@ test('invalid run status and numeric identifiers fail closed', async () => {
 test('GET app shell contains landmarks, no embedded secrets and security headers', async () => {
   const res = await worker.fetch(new Request('https://activity.shardsinc.co.uk/'));
   assert.equal(res.status,200);
-  assert.match(res.headers.get('content-type'),/text\\/html/);
+  assert.ok(res.headers.get('content-type').includes('text/html'));
   assert.match(res.headers.get('content-security-policy'),/frame-ancestors/);
   const html = await res.text();
   assert.match(html,/Shards Mission Control/);
