@@ -23,6 +23,33 @@ jobs:
           node --check activity/ui.mjs
           node --check activity/client.mjs
           node --test activity/test/activity.test.mjs
+      - name: Informational production SDK probe (not PR source validation)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        shell: bash
+        run: |
+          node --input-type=module <<'EOF'
+          const root = 'https://activity.shardsinc.co.uk';
+          for (const path of ['/sdk.js','/npm/zod@3.25.0/+esm']) {
+            const response = await fetch(root + path, {signal: AbortSignal.timeout(12000)});
+            const body = await response.text();
+            console.log(path, response.status, response.headers.get('content-type'), 'bytes',body.length);
+            if (!response.ok || !response.headers.get('content-type')?.includes('javascript')) {
+              throw new Error('Production SDK proxy route unavailable: '+path);
+            }
+            if (!body || body.includes('SDK dependency temporarily unavailable')) {
+              throw new Error('SDK proxy did not return module source: '+path);
+            }
+            if (path === '/sdk.js') {
+              const first = body.slice(0, 240);
+              console.log('SDK source prefix:', first.replaceAll('\n',' ').slice(0,160));
+              const imports = [...body.matchAll(/(?:import|from)\s*["']([^"']+)["']/g)].map(x=>x[1]);
+              console.log('SDK imports (first 12)',imports.slice(0,12));
+              const outside = imports.filter(x=>x.startsWith('http://')||x.startsWith('https://'));
+              if (outside.length) throw new Error('SDK has unproxied absolute dependencies');
+            }
+          }
+          EOF
       - name: Live HTTPS + Cloudflare Worker smoke
         if: github.event_name == 'workflow_dispatch'
         shell: bash
@@ -33,6 +60,7 @@ jobs:
             ['/', 'text/html'],
             ['/styles.css', 'text/css'],
             ['/app.js', 'javascript'],
+            ['/sdk.js', 'javascript'],
             ['/api/health','application/json'],
             ['/api/engineering','application/json']
           ];
