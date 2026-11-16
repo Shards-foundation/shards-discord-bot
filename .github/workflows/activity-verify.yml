@@ -37,8 +37,9 @@ jobs:
           ]) {
             try {
               const result=await fetch(url,{signal:AbortSignal.timeout(12000)});
-              const sample=(await result.text()).slice(0,180).replaceAll('\\n',' ');
-              console.log('UPSTREAM',url, result.status, result.url, result.headers.get('content-type'), sample);
+              const upstreamBody=await result.text();
+              const sample=upstreamBody.slice(0,180).replaceAll('\\n',' ');
+              console.log('UPSTREAM',url, result.status, result.url, result.headers.get('content-type'), 'bytes',upstreamBody.length, sample);
             } catch (e) {
               console.log('UPSTREAM_ERROR',url,e?.name||'error');
             }
