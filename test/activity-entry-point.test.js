@@ -30,7 +30,7 @@ function fakeRest (list, created = { ...ACTIVITY_ENTRY_POINT, id: '1000000000000
 
 test('Entry Point has the official type and Discord launch handler', () => {
   assert.deepEqual(ACTIVITY_ENTRY_POINT, {
-    name: 'launch',
+    name: 'start',
     description: 'Launch Shards Mission Control',
     type: 4,
     handler: 2,
@@ -61,7 +61,7 @@ test('apply uses exactly one POST and preserves all existing slash commands', as
   const rest = fakeRest(existing)
   const result = await ensureActivityEntryPoint(rest, APP_ID, { mode: 'apply' })
   assert.deepEqual(result, {
-    state: 'created', changed: true, name: 'launch', preservedCommands: 4
+    state: 'created', changed: true, name: 'start', preservedCommands: 4
   })
   assert.deepEqual(rest.calls.map(x => x.method), ['GET', 'GET', 'POST'])
   assert.equal(rest.calls[2].route, Routes.applicationCommands(APP_ID))
@@ -82,7 +82,7 @@ test('existing Entry Point with another name is not edited or replaced', async (
 })
 
 test('existing app-handled Entry Point requires review and never changes', async () => {
-  const rest = fakeRest([...existing, { type: 4, name: 'launch', handler: 1 }])
+  const rest = fakeRest([...existing, { type: 4, name: 'start', handler: 1 }])
   const r = await ensureActivityEntryPoint(rest, APP_ID, { mode: 'apply' })
   assert.equal(r.state, 'needs_review')
   assert.equal(r.changed, false)
@@ -90,7 +90,7 @@ test('existing app-handled Entry Point requires review and never changes', async
 })
 
 test('name conflict with existing slash command causes no write', async () => {
-  const rest = fakeRest([...existing, { type: 1, name: 'launch' }])
+  const rest = fakeRest([...existing, { type: 1, name: 'start' }])
   const r = await ensureActivityEntryPoint(rest, APP_ID, { mode: 'apply' })
   assert.equal(r.state, 'name_conflict')
   assert.equal(rest.calls.length, 1)
@@ -114,7 +114,7 @@ test('remote command count or identity change aborts prior to POST', async () =>
 })
 
 test('new command cannot claim success from unexpected Discord response', async () => {
-  const rest = fakeRest(existing, { type: 1, handler: 2, name: 'launch' })
+  const rest = fakeRest(existing, { type: 1, handler: 2, name: 'start' })
   await assert.rejects(ensureActivityEntryPoint(rest, APP_ID, { mode: 'apply' }), /unexpected result/)
 })
 
