@@ -10,7 +10,6 @@ const CACHE_SECONDS = 75;
 const SECURITY_HEADERS = Object.freeze({
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
-  'x-frame-options': 'ALLOWALL',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
   'cross-origin-resource-policy': 'cross-origin',
   'content-security-policy': [
