@@ -29,41 +29,21 @@ jobs:
         shell: bash
         run: |
           node --input-type=module <<'EOF'
+          import { createHash } from 'node:crypto';
           const root = 'https://activity.shardsinc.co.uk';
-          for (const url of [
-            'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm',
-            'https://esm.sh/@discord/embedded-app-sdk@2.5.0?bundle',
-            'https://unpkg.com/@discord/embedded-app-sdk@2.5.0/package.json'
-          ]) {
-            try {
-              const result=await fetch(url,{signal:AbortSignal.timeout(12000)});
-              const upstreamBody=await result.text();
-              const sample=upstreamBody.slice(0,180).replaceAll('\\n',' ');
-              console.log('UPSTREAM',url, result.status, result.url, result.headers.get('content-type'), 'bytes',upstreamBody.length, sample);
-            } catch (e) {
-              console.log('UPSTREAM_ERROR',url,e?.name||'error');
-            }
+          const sdk = await fetch(root + '/sdk.js', { signal: AbortSignal.timeout(12000) });
+          const body = await sdk.text();
+          console.log('Deployed SDK status', sdk.status, sdk.headers.get('content-type'), 'bytes', body.length);
+          if (!sdk.ok || !sdk.headers.get('content-type')?.includes('javascript')) {
+            throw new Error('Self-hosted SDK asset is not available');
           }
-
-          for (const path of ['/sdk.js','/npm/zod@3.25.0/+esm']) {
-            const response = await fetch(root + path, {signal: AbortSignal.timeout(12000)});
-            const body = await response.text();
-            console.log(path, response.status, response.headers.get('content-type'), 'bytes',body.length, 'detail',body.slice(0,180));
-            if (!response.ok || !response.headers.get('content-type')?.includes('javascript')) {
-              throw new Error('Production SDK proxy route unavailable: '+path);
-            }
-            if (!body || body.includes('SDK dependency temporarily unavailable')) {
-              throw new Error('SDK proxy did not return module source: '+path);
-            }
-            if (path === '/sdk.js') {
-              const first = body.slice(0, 240);
-              console.log('SDK source prefix:', first.replaceAll('\n',' ').slice(0,160));
-              const imports = [...body.matchAll(/(?:import|from)\s*["']([^"']+)["']/g)].map(x=>x[1]);
-              console.log('SDK imports (first 12)',imports.slice(0,12));
-              const outside = imports.filter(x=>x.startsWith('http://')||x.startsWith('https://'));
-              if (outside.length) throw new Error('SDK has unproxied absolute dependencies');
-            }
+          const hash = createHash('sha256').update(body).digest('hex');
+          console.log('Deployed SDK SHA256', hash);
+          if (hash !== '675969a26b20973556721970db3e0201c902e53476c4176c71d80f42e989579d') {
+            throw new Error('Deployed SDK does not match verified v2.5.0');
           }
+          const blocked = await fetch(root + '/npm/zod@3.25.0/+esm');
+          if (blocked.status !== 404) throw new Error('Old npm dynamic proxy route is unexpectedly enabled');
           EOF
       - name: Live HTTPS + Cloudflare Worker smoke
         if: github.event_name == 'workflow_dispatch'
