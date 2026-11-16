@@ -1,0 +1,6 @@
+---
+# Custom label used by the existing self-hosted Discord deployment runner.
+# This only teaches the workflow linter the label; it does not add or start a runner.
+self-hosted-runner:
+  labels:
+    - shards-deploy
