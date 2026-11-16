@@ -12,7 +12,7 @@ A self-contained read-only web Activity deployed to Cloudflare Workers. It is ho
 
 ## Current functionality
 
-The Activity provides a responsive mission-control interface, public GitHub engineering summaries for a fixed allowlist (`shards-discord-bot`, `Shards-kernel`, `Shards-MCP`), recent public workflow runs, search and filtering, manual refresh and source links. Data is fetched server-side from the GitHub public REST API with 30-minute Cloudflare upstream caching. Missing upstream data is labelled unavailable rather than healthy. Public metrics may be up to 30 minutes stale; the UI discloses this.
+The Activity provides a responsive mission-control interface, public GitHub engineering summaries for a fixed allowlist (`shards-discord-bot`, `Shards-kernel`, `Shards-MCP`), recent public workflow runs, search and filtering, manual refresh and source links. Data is fetched server-side from the GitHub public REST API with 60-minute shared KV and Cloudflare upstream caching. Missing upstream data is labelled unavailable rather than healthy. Public metrics may be at least 60 minutes old if stale fallback is in effect, otherwise up to 60 minutes stale; the UI discloses this.
 
 Discord Embed SDK 2.5.0 is attempted **only when launched in an iframe/Discord context**, via a pinned SDK version served through the Worker's same-origin SDK proxy. `discordSdk.ready()` proves the iframe handshake, not user identity. No OAuth scopes, client secret, bot token, password, privileged Discord intent, interactive bot runtime or task execution are used. In a normal browser, the UI explicitly labels itself as browser preview.
 
@@ -28,6 +28,10 @@ Discord Embed SDK 2.5.0 is attempted **only when launched in an iframe/Discord c
 - Content Security Policy restricts scripts, styles and framing; no personal data is persisted.
 - Agent status is **not connected** until the relevant authenticated health endpoints have been integrated.
 - The SDK is served under /sdk.js, and nested version-pinned npm modules are proxied through the same Cloudflare origin. Discord therefore makes no unmapped CDN request. The upstream CDN remains a third-party runtime dependency; vendor a reviewed build-time bundle before adding authenticated functionality. CSP permits same-origin scripts only.
+
+## Free-tier global cache
+
+The Worker binds to an independent Cloudflare Workers KV namespace named `shards-mission-control-public-cache` as `ENGINEERING_CACHE`. This stores only public GitHub metadata for up to one day, refreshes successful snapshots after one hour and retries unavailable upstream data after three minutes. It uses the free KV request/write allowance rather than an always-on compute instance. It does not collect Discord member data or model prompts. Cache errors are handled as failures, not proof of GitHub health. When a previous valid snapshot exists and the upstream fails, the API sets `serving_stale: true` and retains its original `fetched_at`.
 
 ## Test
 
