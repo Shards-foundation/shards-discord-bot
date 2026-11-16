@@ -47,7 +47,7 @@ jobs:
           for (const path of ['/sdk.js','/npm/zod@3.25.0/+esm']) {
             const response = await fetch(root + path, {signal: AbortSignal.timeout(12000)});
             const body = await response.text();
-            console.log(path, response.status, response.headers.get('content-type'), 'bytes',body.length);
+            console.log(path, response.status, response.headers.get('content-type'), 'bytes',body.length, 'detail',body.slice(0,180));
             if (!response.ok || !response.headers.get('content-type')?.includes('javascript')) {
               throw new Error('Production SDK proxy route unavailable: '+path);
             }
