@@ -1,7 +1,7 @@
 import { Routes } from 'discord.js'
 
 export const ACTIVITY_ENTRY_POINT = Object.freeze({
-  name: 'launch',
+  name: 'start',
   description: 'Launch Shards Mission Control',
   type: 4, // PRIMARY_ENTRY_POINT
   handler: 2, // DISCORD_LAUNCH_ACTIVITY: no bot Gateway or HTTP callback needed
