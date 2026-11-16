@@ -66,7 +66,7 @@ async function githubGet(path, fetchImpl) {
 }
 
 function cleanPr(item, repo) {
-  const number = Number(item?.number);
+  const number = item?.number;
   if (!Number.isSafeInteger(number) || number < 1) return null;
   return {
     number, draft: item?.draft === true,
@@ -78,7 +78,7 @@ function cleanPr(item, repo) {
 }
 
 function cleanRun(item, repo) {
-  const id = Number(item?.id);
+  const id = item?.id;
   if (!Number.isSafeInteger(id) || id < 1) return null;
   const goodStatus = new Set(['queued', 'in_progress', 'waiting', 'pending', 'requested', 'completed']);
   const goodConclusion = new Set(['success', 'failure', 'cancelled', 'skipped', 'neutral', 'timed_out', 'action_required', 'stale']);
