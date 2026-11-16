@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Script } from 'node:vm';
-import worker, { engineeringSnapshot, vendorUpstreamFor } from '../worker.mjs';
+import worker, { engineeringSnapshot, cachedEngineering, vendorUpstreamFor } from '../worker.mjs';
 import { PAGE_HTML, PAGE_CSS } from '../ui.mjs';
 import { CLIENT_JS } from '../client.mjs';
 
@@ -121,4 +121,43 @@ test('Discord SDK requests are served from the same origin and proxy paths are c
   assert.equal(vendorUpstreamFor('//evil.test/'), null);
   assert.ok(!CLIENT_JS.includes("import('https://cdn.jsdelivr.net"));
   assert.ok(CLIENT_JS.includes("import('/sdk.js')"));
+});
+
+test('global KV cache prevents repeated GitHub requests until refresh boundary', async () => {
+  let calls = 0;
+  const storage = new Map();
+  const cache = {
+    get: async key => JSON.parse(storage.get(key) || 'null'),
+    put: async (key, value, opts) => {
+      assert.equal(opts.expirationTtl, 86400);
+      storage.set(key, value);
+    },
+  };
+  const fetchImpl = async url => { calls += 1; return canned(url); };
+  const env = { ENGINEERING_CACHE: cache };
+  const first = await cachedEngineering(env, fetchImpl, 10000);
+  assert.equal(calls, 6);
+  assert.equal(first.cache_status, 'verified');
+  const again = await cachedEngineering(env, fetchImpl, 20000);
+  assert.equal(calls, 6);
+  assert.equal(again.cache_status, 'verified');
+  const nextHour = await cachedEngineering(env, fetchImpl, 3620000);
+  assert.equal(calls, 12);
+  assert.equal(nextHour.cache_status, 'verified');
+});
+
+test('upstream failure serves explicitly stale last verified snapshot', async () => {
+  let value;
+  const cache = {
+    get: async () => value ? JSON.parse(value) : null,
+    put: async (_key, next) => { value = next; },
+  };
+  const env = { ENGINEERING_CACHE: cache };
+  const original = await cachedEngineering(env, canned, 0);
+  assert.equal(original.cache_status, 'verified');
+  const stale = await cachedEngineering(env, async () => ({ ok:false, status:403 }), 3700000);
+  assert.equal(stale.cache_status, 'stale');
+  assert.equal(stale.serving_stale, true);
+  assert.equal(stale.fetched_at, original.fetched_at);
+  assert.match(stale.warning, /unavailable/);
 });
