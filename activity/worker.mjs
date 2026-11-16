@@ -4,8 +4,9 @@ import { CLIENT_JS } from './client.mjs';
 const REPOSITORIES = Object.freeze(['shards-discord-bot', 'Shards-kernel', 'Shards-MCP']);
 const OWNER = 'Shards-foundation';
 const APP_NAME = 'Shards Mission Control';
-const ALLOWED = new Set(REPOSITORIES);
-const CACHE_SECONDS = 1800;
+const CACHE_SECONDS = 3600;
+const CACHE_KEY = 'engineering-snapshot-v1';
+const CACHE_EXPIRATION_SECONDS = 86400;
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm';
 const CDN_BASE = 'https://cdn.jsdelivr.net';
 const CDN_PATH_PATTERN = /^\/npm\/(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@[a-z0-9._-]+\/\+esm$/i;
@@ -41,7 +42,7 @@ function response(body, type, status = 200, cache = 'no-store') {
 }
 
 function json(body, status = 200) {
-  return response(JSON.stringify(body), 'application/json; charset=utf-8', status, 'public, max-age=30, s-maxage=75');
+  return response(JSON.stringify(body), 'application/json; charset=utf-8', status, 'public, max-age=30, s-maxage=30');
 }
 
 function safeString(value, max = 100) {
@@ -156,8 +157,54 @@ export async function engineeringSnapshot(fetchImpl = fetch) {
   };
 }
 
+
+export async function cachedEngineering(env = {}, fetchImpl = fetch, now = Date.now()) {
+  const store = env?.ENGINEERING_CACHE;
+  let previous = null;
+  if (store && typeof store.get === 'function') {
+    try {
+      const candidate = await store.get(CACHE_KEY, 'json');
+      if (candidate?.snapshot?.schema === 'shards.activity.engineering.v1'
+        && Array.isArray(candidate.snapshot.repositories)
+        && candidate.snapshot.repositories.length === REPOSITORIES.length
+        && Number.isSafeInteger(candidate.fresh_until)) previous = candidate;
+    } catch {
+      // A KV read failure must not be mistaken for a healthy upstream.
+    }
+  }
+  if (previous?.fresh_until > now) {
+    return { ...previous.snapshot, cache_status: previous.status || 'cached' };
+  }
+
+  const latest = await engineeringSnapshot(fetchImpl);
+  const complete = latest.repositories.every(repo => repo.prs_available && repo.runs_available);
+  let snapshot = latest;
+  let status = complete ? 'verified' : 'partial';
+
+  if (!complete && previous) {
+    snapshot = { ...previous.snapshot,
+      warning: 'GitHub upstream unavailable. Previously verified public snapshot shown; check fetched_at.',
+      serving_stale: true };
+    status = 'stale';
+  }
+
+  if (store && typeof store.put === 'function') {
+    try {
+      await store.put(CACHE_KEY, JSON.stringify({
+        snapshot,
+        status,
+        fresh_until: now + (complete ? CACHE_SECONDS * 1000 : 180000),
+      }), { expirationTtl: CACHE_EXPIRATION_SECONDS });
+    } catch {
+      // A cache write failure does not create a false health signal.
+    }
+  }
+
+  return { ...snapshot, cache_status: status };
+}
+
 export default {
-  async fetch(request) {
+  async fetch(request, env = {}) {
     const url = new URL(request.url);
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return response('Method not allowed', 'text/plain; charset=utf-8', 405);
@@ -171,7 +218,7 @@ export default {
       });
     }
     if (url.pathname === '/api/engineering') {
-      return json(await engineeringSnapshot());
+      return json(await cachedEngineering(env));
     }
     if (vendorUpstreamFor(url.pathname)) {
       return vendorModule(url.pathname);
