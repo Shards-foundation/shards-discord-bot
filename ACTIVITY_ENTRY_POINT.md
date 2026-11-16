@@ -16,9 +16,9 @@ this Entry Point.
 ## Supported safe operations
 
 ```sh
-npm run activity:entry:preview
-npm run activity:entry:check
-npm run activity:entry:add
+node .github/scripts/ensure-activity-entry-point.js
+node --env-file-if-exists=.env .github/scripts/ensure-activity-entry-point.js --check
+node --env-file-if-exists=.env .github/scripts/ensure-activity-entry-point.js --apply --confirm-add-only
 ```
 
 - `preview`: offline inspection of the proposed command. Requires no credentials.
@@ -54,6 +54,15 @@ GitHub requires `workflow_dispatch` files to exist on the default branch.
 The workflow never runs on PRs or pushes. It operates on `main` only,
 has read-only GitHub permissions, and has no deletion or bulk-registration
 code path. **Merging the PR by itself makes no Discord changes.**
+
+## Deployment isolation
+
+The repair scripts now live under `.github/scripts/`, not `src/` or
+`scripts/`. The repository's production `package.json` remains unchanged.
+Once PR #25's runtime-only deployment filter is merged, this PR will
+change only GitHub files, tests and documentation; it will not match the
+self-hosted bot deployment trigger. Merge PR #25 first and verify the
+deployment workflow on `main` before merging this PR.
 
 ## Credentials and runtime
 
