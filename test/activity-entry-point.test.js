@@ -17,8 +17,14 @@ function fakeRest (list, created = { ...ACTIVITY_ENTRY_POINT, id: '1000000000000
   const calls = []
   return {
     calls,
-    async get (route) { calls.push({ method: 'GET', route }); return list; },
-    async post (route, params) { calls.push({ method: 'POST', route, params }); return created; }
+    async get (route) {
+      calls.push({ method: 'GET', route })
+      return list
+    },
+    async post (route, params) {
+      calls.push({ method: 'POST', route, params })
+      return created
+    }
   }
 }
 
