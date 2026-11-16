@@ -53,6 +53,15 @@ test('production deploy is only a push-to-main workflow, not a PR or manual trig
   const deploy = read('.github/workflows/deploy-self-hosted.yml')
   assert.match(deploy, /push:\s*\n\s*branches:\s*\n\s*- main/)
   assert.match(deploy, /runs-on: \[self-hosted, linux, x64, shards-deploy\]/)
+  // CI-only merges must never trigger a deploy job.
+  for (const runtimePath of [
+    "'src/**'", "'scripts/**'", "'package.json'", "'package-lock.json'",
+    "'compose.yaml'", "'Dockerfile'", "'.dockerignore'"
+  ]) {
+    assert.ok(deploy.includes(runtimePath), runtimePath)
+  }
+  assert.equal(deploy.includes("'test/**'"), false)
+  assert.equal(deploy.includes("'.github/**'"), false)
   assert.equal(deploy.includes('pull_request:'), false)
   assert.equal(deploy.includes('workflow_dispatch:'), false)
   assert.equal(deploy.includes('shards-discord-bot'), true)
