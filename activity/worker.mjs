@@ -66,12 +66,12 @@ async function vendorModule(pathname, fetchImpl = fetch) {
       signal: AbortSignal.timeout(9000),
       cf: { cacheTtl: 86400, cacheEverything: true },
     });
-    if (!res.ok) return response('SDK dependency temporarily unavailable', 'text/plain; charset=utf-8', 502);
+    if (!res.ok) return response('SDK upstream HTTP ' + res.status, 'text/plain; charset=utf-8', 502);
     const script = await res.text();
-    if (script.length > 1200000) return response('SDK dependency too large', 'text/plain; charset=utf-8', 502);
+    if (script.length > 3000000) return response('SDK dependency too large: ' + script.length, 'text/plain; charset=utf-8', 502);
     return response(script, 'text/javascript; charset=utf-8', 200, 'public, max-age=86400');
-  } catch {
-    return response('SDK dependency temporarily unavailable', 'text/plain; charset=utf-8', 502);
+  } catch (error) {
+    return response('SDK upstream network exception: ' + (error instanceof Error ? error.name : 'unknown'), 'text/plain; charset=utf-8', 502);
   }
 }
 
