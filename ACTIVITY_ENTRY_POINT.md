@@ -85,4 +85,4 @@ is not a suitable unverified Activity test environment.
 
 Do not modify or replace previously registered commands to enable an Activity.
 
-Source: https://docs.discord.com/developers/interactions/application-commands
+Source: [Discord application commands](https://docs.discord.com/developers/interactions/application-commands)
