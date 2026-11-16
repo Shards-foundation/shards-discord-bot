@@ -57,8 +57,12 @@ remain in scope. The old Pysa scanner examined Python, not this bot.
 - `hadolint.yml`, `devskim.yml`, `ossar.yml`,
   `defender-for-devops.yml`: existing applicable security layers
   retained; further updates require their own verified review.
-- `deploy-self-hosted.yml`: **left completely unchanged**.
-  It still deploys from `main` on a registered self-hosted runner.
+- `deploy-self-hosted.yml`: deployment trigger now includes a narrow
+  `paths` allowlist for `src/**`, `scripts/**`, `package.json`,
+  `package-lock.json`, `compose.yaml`, `Dockerfile` and `.dockerignore`.
+  CI, tests, documentation and Activity-only edits no longer qualify
+  for automatic self-hosted deployment. The job body and runner labels
+  are otherwise unchanged.
 - Other unrelated but potentially useful notification/publication
   automations are left unchanged pending separate owner review.
 
@@ -105,9 +109,12 @@ Release sources:
 - Confirm `osv-scanner.yml` and all applicable security workflows
   actually execute and report results; do not mark them green if they
   fail due to configuration.
-- Confirm no registered self-hosted runner will unexpectedly restart
-  the current Hermes/Discord Gateway. Merging a PR to `main`
-  triggers `deploy-self-hosted.yml` even for CI-only edits.
+- Confirm self-hosted runner ownership before any merge that changes
+  runtime allowlisted paths. GitHub `push.paths` will skip
+  `deploy-self-hosted.yml` for the CI-only changes in this PR,
+  provided the merge does not include unrelated runtime files.
+  PR #23 separately changes `src/` and `package.json` and is **not**
+  covered by this safety exemption.
 - Review whether the existing `docker-publish.yml` daily publication,
   `npm-publish-github-packages.yml`, issue AI summaries and stale
   PR automation are still desired. They were **not changed** here.
