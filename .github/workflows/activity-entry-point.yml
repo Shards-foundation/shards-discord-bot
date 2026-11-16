@@ -42,7 +42,10 @@ jobs:
       - name: Install pinned dependencies (no lifecycle scripts)
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Verify add-only command invariants offline
-        run: node --test test/activity-entry-point.test.js
+        run: |
+          node --check .github/scripts/activity-entry-point.js
+          node --check .github/scripts/ensure-activity-entry-point.js
+          node --test test/activity-entry-point.test.js
       - name: Enforce explicit add confirmation
         if: inputs.operation == 'add'
         shell: bash
@@ -65,9 +68,9 @@ jobs:
             exit 1
           fi
           if [[ "$OPERATION" == "check" ]]; then
-            npm run activity:entry:check
+            node .github/scripts/ensure-activity-entry-point.js --check
           elif [[ "$OPERATION" == "add" ]]; then
-            npm run activity:entry:add
+            node .github/scripts/ensure-activity-entry-point.js --apply --confirm-add-only
           else
             echo "Unknown operation, refusing." >&2
             exit 1
@@ -77,4 +80,4 @@ jobs:
         shell: bash
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        run: npm run activity:entry:check
+        run: node .github/scripts/ensure-activity-entry-point.js --check
