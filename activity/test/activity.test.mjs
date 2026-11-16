@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Script } from 'node:vm';
-import worker, { engineeringSnapshot } from '../worker.mjs';
+import worker, { engineeringSnapshot, vendorUpstreamFor } from '../worker.mjs';
 import { PAGE_HTML, PAGE_CSS } from '../ui.mjs';
 import { CLIENT_JS } from '../client.mjs';
 
@@ -109,4 +109,16 @@ test('client code is syntactically valid and has no dynamic external tool execut
   assert.ok(PAGE_CSS.includes('prefers-reduced-motion'));
   assert.ok(!CLIENT_JS.includes('eval('));
   assert.ok(!CLIENT_JS.includes('localStorage'));
+});
+
+test('Discord SDK requests are served from the same origin and proxy paths are constrained', () => {
+  assert.equal(vendorUpstreamFor('/sdk.js'), 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
+  assert.equal(vendorUpstreamFor('/npm/zod@3.25.0/+esm'), 'https://cdn.jsdelivr.net/npm/zod@3.25.0/+esm');
+  assert.equal(vendorUpstreamFor('/npm/@discord/embedded-app-sdk@2.5.0/+esm'), 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
+  assert.equal(vendorUpstreamFor('/npm/example@1.0.0/private'), null);
+  assert.equal(vendorUpstreamFor('/npm/%2e%2e/secrets'), null);
+  assert.equal(vendorUpstreamFor('/api/health'), null);
+  assert.equal(vendorUpstreamFor('//evil.test/'), null);
+  assert.ok(!CLIENT_JS.includes("import('https://cdn.jsdelivr.net"));
+  assert.ok(CLIENT_JS.includes("import('/sdk.js')"));
 });
