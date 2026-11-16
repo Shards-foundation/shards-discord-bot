@@ -5,7 +5,10 @@ const REPOSITORIES = Object.freeze(['shards-discord-bot', 'Shards-kernel', 'Shar
 const OWNER = 'Shards-foundation';
 const APP_NAME = 'Shards Mission Control';
 const ALLOWED = new Set(REPOSITORIES);
-const CACHE_SECONDS = 75;
+const CACHE_SECONDS = 1800;
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm';
+const CDN_BASE = 'https://cdn.jsdelivr.net';
+const CDN_PATH_PATTERN = /^\/npm\/(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@[a-z0-9._-]+\/\+esm$/i;
 
 const SECURITY_HEADERS = Object.freeze({
   'x-content-type-options': 'nosniff',
@@ -14,9 +17,9 @@ const SECURITY_HEADERS = Object.freeze({
   'cross-origin-resource-policy': 'cross-origin',
   'content-security-policy': [
     "default-src 'none'",
-    "script-src 'self' https://cdn.jsdelivr.net",
+    "script-src 'self'",
     "style-src 'self'",
-    "connect-src 'self' https://cdn.jsdelivr.net",
+    "connect-src 'self'",
     "img-src 'self' data: https://cdn.discordapp.com",
     "font-src 'self'",
     "base-uri 'none'",
@@ -43,6 +46,32 @@ function json(body, status = 200) {
 
 function safeString(value, max = 100) {
   return typeof value === 'string' ? value.slice(0, max) : '';
+}
+
+export function vendorUpstreamFor(pathname) {
+  if (pathname === '/sdk.js') return SDK_URL;
+  if (pathname.length <= 190 && CDN_PATH_PATTERN.test(pathname)) return CDN_BASE + pathname;
+  return null;
+}
+
+async function vendorModule(pathname, fetchImpl = fetch) {
+  const upstream = vendorUpstreamFor(pathname);
+  if (!upstream) return response('Not found', 'text/plain; charset=utf-8', 404);
+  try {
+    const res = await fetchImpl(upstream, {
+      method: 'GET',
+      headers: { Accept: 'text/javascript' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(9000),
+      cf: { cacheTtl: 86400, cacheEverything: true },
+    });
+    if (!res.ok) return response('SDK dependency temporarily unavailable', 'text/plain; charset=utf-8', 502);
+    const script = await res.text();
+    if (script.length > 1200000) return response('SDK dependency too large', 'text/plain; charset=utf-8', 502);
+    return response(script, 'text/javascript; charset=utf-8', 200, 'public, max-age=86400');
+  } catch {
+    return response('SDK dependency temporarily unavailable', 'text/plain; charset=utf-8', 502);
+  }
 }
 
 async function githubGet(path, fetchImpl) {
@@ -120,6 +149,7 @@ export async function engineeringSnapshot(fetchImpl = fetch) {
     schema: 'shards.activity.engineering.v1',
     fetched_at: new Date().toISOString(),
     source: 'GitHub public REST API (read only)',
+    upstream_cache_ttl_seconds: CACHE_SECONDS,
     repositories: repos,
     authenticated: false,
     actions_enabled: false,
@@ -142,6 +172,9 @@ export default {
     }
     if (url.pathname === '/api/engineering') {
       return json(await engineeringSnapshot());
+    }
+    if (vendorUpstreamFor(url.pathname)) {
+      return vendorModule(url.pathname);
     }
     if (url.pathname === '/app.js') {
       return response(request.method === 'HEAD' ? null : CLIENT_JS,
