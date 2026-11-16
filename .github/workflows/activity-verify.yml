@@ -30,6 +30,20 @@ jobs:
         run: |
           node --input-type=module <<'EOF'
           const root = 'https://activity.shardsinc.co.uk';
+          for (const url of [
+            'https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm',
+            'https://esm.sh/@discord/embedded-app-sdk@2.5.0?bundle',
+            'https://unpkg.com/@discord/embedded-app-sdk@2.5.0/package.json'
+          ]) {
+            try {
+              const result=await fetch(url,{signal:AbortSignal.timeout(12000)});
+              const sample=(await result.text()).slice(0,180).replaceAll('\\n',' ');
+              console.log('UPSTREAM',url, result.status, result.url, result.headers.get('content-type'), sample);
+            } catch (e) {
+              console.log('UPSTREAM_ERROR',url,e?.name||'error');
+            }
+          }
+
           for (const path of ['/sdk.js','/npm/zod@3.25.0/+esm']) {
             const response = await fetch(root + path, {signal: AbortSignal.timeout(12000)});
             const body = await response.text();
