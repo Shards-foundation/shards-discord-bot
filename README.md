@@ -71,6 +71,8 @@ For the evidence-backed quality checklist, repository findings, and deferred pri
   must be online. Replies are private, scoped to read-only GitHub metadata, and cache live lookups for 60 seconds
   to reduce unauthenticated API pressure. Private repositories (including `shards-github-agent`) are excluded
   until authenticated least-privilege access exists.
+- `/shards status` — privately reports bot readiness, gateway latency, process uptime and local task-worker loop state; it performs no network lookup.
+- `/shards agents` — privately lists the configured local Qwen task worker and states when no remote agent integrations are configured; it does not expose task contents.
 - `/ai ask prompt` — runs a real inference request against the configured Ollama model and privately returns the response.
 - `/ai research prompt` — lets Qwen call a bounded set of read-only public GitHub tools (repository search, repository metadata, and public text-file reads) before producing a source-linked summary.
 - `/ai status` — checks API reachability and whether the configured model is installed.

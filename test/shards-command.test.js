@@ -41,3 +41,41 @@ test('/shards engineering returns private, safe GitHub-derived information witho
   assert.deepEqual(replies[1].allowedMentions, { parse: [] });
   assert.doesNotMatch(replies[1].content, /everyone/);
 });
+
+test('/shards status and agents are registered as read-only subcommands', () => {
+  const shards = commands.find(command => command.name === 'shards');
+  assert.deepEqual(shards.options.map(option => option.name), ['engineering', 'status', 'agents']);
+});
+
+test('/shards status is read-only, private, and reports runtime health', async () => {
+  const replies = [];
+  let fetchCalls = 0;
+  const client = { isReady: () => true, ws: { ping: 37 }, taskWorker: { running: true } };
+  const interaction = { commandName: 'shards', client, isChatInputCommand: () => true, options: { getSubcommand: () => 'status' }, reply: async payload => { replies.push(payload); } };
+  const fetchImpl = async () => { fetchCalls += 1; throw new Error('status must not fetch'); };
+  const ollamaClient = { chat: async () => { throw new Error('status must not run a model'); }, research: async () => { throw new Error('status must not run a model'); } };
+  await handleInteraction(interaction, { error() {} }, undefined, fetchImpl, ollamaClient);
+  assert.equal(fetchCalls, 0);
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].flags, MessageFlags.Ephemeral);
+  assert.deepEqual(replies[0].allowedMentions, { parse: [] });
+  assert.match(replies[0].content, /Bot readiness: ready/);
+  assert.match(replies[0].content, /Gateway latency: 37 ms/);
+  assert.match(replies[0].content, /Local task worker: running/);
+});
+
+test('/shards agents reports only configured worker state without task data', async () => {
+  const replies = [];
+  let fetchCalls = 0;
+  const interaction = { commandName: 'shards', client: { taskWorker: { running: false } }, isChatInputCommand: () => true, options: { getSubcommand: () => 'agents' }, reply: async payload => { replies.push(payload); } };
+  const fetchImpl = async () => { fetchCalls += 1; throw new Error('agents must not fetch'); };
+  const ollamaClient = { chat: async () => { throw new Error('agents must not run a model'); }, research: async () => { throw new Error('agents must not run a model'); } };
+  await handleInteraction(interaction, { error() {} }, undefined, fetchImpl, ollamaClient);
+  assert.equal(fetchCalls, 0);
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].flags, MessageFlags.Ephemeral);
+  assert.deepEqual(replies[0].allowedMentions, { parse: [] });
+  assert.match(replies[0].content, /Local Qwen task worker: stopped/);
+  assert.match(replies[0].content, /Remote agent integrations: none configured/);
+  assert.doesNotMatch(replies[0].content, /Task [A-Za-z0-9_-]+|requester|prompt/i);
+});
