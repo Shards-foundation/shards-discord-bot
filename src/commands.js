@@ -44,6 +44,14 @@ export const commands = [
         required: true,
         choices: PUBLIC_SHARDS_PROJECTS.map(value => ({ name: value, value })),
       }],
+    }, {
+      type: ApplicationCommandOptionType.Subcommand,
+      name: 'status',
+      description: 'Show bot, gateway, and task-worker health.',
+    }, {
+      type: ApplicationCommandOptionType.Subcommand,
+      name: 'agents',
+      description: 'List configured local agent availability.',
     }],
   },
   {
@@ -190,6 +198,33 @@ function formatStatus(client) {
     'Task executor: local Qwen worker (when Ollama is available)',
     `Process uptime: ${uptime}`,
     `Runtime: Node.js ${process.versions.node}`,
+  ].join('\n');
+}
+
+function formatShardsStatus(client) {
+  const ready = typeof client?.isReady === 'function' && client.isReady();
+  const ping = client?.ws?.ping;
+  const latency = Number.isFinite(ping) && ping >= 0 ? Math.round(ping) + ' ms' : 'unavailable';
+  const uptimeSeconds = Math.floor(process.uptime());
+  const uptime = Math.floor(uptimeSeconds / 3600) + 'h ' + Math.floor((uptimeSeconds % 3600) / 60) + 'm ' + (uptimeSeconds % 60) + 's';
+  const worker = client?.taskWorker;
+  const workerState = worker?.running === true ? 'running' : worker ? 'stopped' : 'not initialized';
+  return [
+    'Bot readiness: ' + (ready ? 'ready' : 'not ready'),
+    'Gateway latency: ' + latency,
+    'Local task worker: ' + workerState,
+    'Process uptime: ' + uptime,
+    'Runtime: Node.js ' + process.versions.node,
+  ].join('\n');
+}
+
+function formatShardsAgents(client) {
+  const worker = client?.taskWorker;
+  const workerState = worker?.running === true ? 'running' : worker ? 'stopped' : 'not initialized';
+  return [
+    '**Configured agents (read-only)**',
+    '• Local Qwen task worker: ' + workerState,
+    '• Remote agent integrations: none configured in this bot.',
   ].join('\n');
 }
 
@@ -387,6 +422,7 @@ const HELP_TEXT = [
   '`/choose options` — randomly select from 2–20 comma-separated options',
   '`/coinflip` — heads or tails',
   '`/github repo owner/name` — public GitHub repository metadata',
+  '`/shards status` — bot, gateway and local worker status; `/shards agents` — configured local agent availability',
   '`/shards engineering project` — latest open Shards PRs and main-branch workflow result (read-only; no Qwen required)',
   '`/ai ask prompt` — send a prompt to the configured Qwen model through Ollama',
   '`/ai research prompt` — Qwen-assisted, read-only public GitHub research with a bounded tool loop',
@@ -475,10 +511,18 @@ export async function handleInteraction(interaction, logger = console, taskStore
       await interaction.editReply({ content: boundDiscordContent(result.content), allowedMentions: { parse: [] } });
       return;
     } else if (interaction.commandName === 'shards') {
-      if (interaction.options.getSubcommand() !== 'engineering') return;
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const result = await getShardsEngineeringSnapshot(interaction.options.getString('project', true), fetchImpl);
-      await interaction.editReply({ content: boundDiscordContent(result.content), allowedMentions: { parse: [] } });
+      const subcommand = interaction.options.getSubcommand();
+      if (subcommand === 'engineering') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const result = await getShardsEngineeringSnapshot(interaction.options.getString('project', true), fetchImpl);
+        await interaction.editReply({ content: boundDiscordContent(result.content), allowedMentions: { parse: [] } });
+        return;
+      }
+      if (subcommand === 'status' || subcommand === 'agents') {
+        const response = subcommand === 'status' ? formatShardsStatus(interaction.client) : formatShardsAgents(interaction.client);
+        await interaction.reply({ content: boundDiscordContent(response), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+        return;
+      }
       return;
     } else if (interaction.commandName === 'task') {
       if (!taskStore) throw new Error('Task store is unavailable.');
