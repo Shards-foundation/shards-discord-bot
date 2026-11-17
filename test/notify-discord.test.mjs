@@ -41,3 +41,30 @@ test('safe Discord payload disables mentions', async () => {
 test('reports remote delivery failures without leaking webhook URL', async () => {
   await assert.rejects(() => publish({ eventName: 'pull_request', event: pr, webhook, fetchImpl: async () => ({ ok: false, status: 429 }) }), /HTTP 429/);
 });
+
+const ciFailure = {
+  repository,
+  action: 'completed',
+  workflow_run: { id: 444, name: 'CI', conclusion: 'failure', head_branch: 'feature/@everyone\nmasked', head_repository: { full_name: repository.full_name } },
+};
+
+test('formats only same-repository CI failures with sanitized labels and a run link', () => {
+  const content = buildMessage('workflow_run', ciFailure);
+  assert.match(content, /CI failed/);
+  assert.match(content, /Workflow: CI/);
+  assert.match(content, /Branch: feature\/ everyone masked/);
+  assert.match(content, /\/actions\/runs\/444/);
+  assert.doesNotMatch(content, /@everyone/);
+  assert.equal(buildMessage('workflow_run', { ...ciFailure, workflow_run: { ...ciFailure.workflow_run, conclusion: 'success' } }), null);
+  assert.equal(buildMessage('workflow_run', { ...ciFailure, workflow_run: { ...ciFailure.workflow_run, head_repository: { full_name: 'fork-owner/fork' } } }), null);
+});
+
+test('publishes one mention-safe Discord message for one CI failure event', async () => {
+  const calls = [];
+  const result = await publish({ eventName: 'workflow_run', event: ciFailure, webhook, fetchImpl: async (...args) => { calls.push(args); return { ok: true }; } });
+  assert.equal(result.status, 'delivered');
+  assert.equal(calls.length, 1);
+  const payload = JSON.parse(calls[0][1].body);
+  assert.match(payload.content, /CI failed/);
+  assert.deepEqual(payload.allowed_mentions, { parse: [] });
+});

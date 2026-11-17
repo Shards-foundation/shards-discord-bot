@@ -13,6 +13,12 @@ export function validateWebhook(raw) {
   return url.href;
 }
 
+function safeDiscordLabel(value, fallback) {
+  if (typeof value !== 'string') return fallback;
+  const safe = value.replace(/[^A-Za-z0-9_. /-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return safe || fallback;
+}
+
 export function buildMessage(eventName, event) {
   const repo = event?.repository?.full_name;
   if (typeof repo !== 'string' || !REPO_RE.test(repo)) throw new Error('Invalid GitHub repository.');
@@ -23,6 +29,15 @@ export function buildMessage(eventName, event) {
     if (!['opened', 'reopened', 'closed'].includes(action) || !Number.isSafeInteger(number) || number < 1) return null;
     const state = action === 'closed' ? (event.pull_request.merged === true ? 'merged' : 'closed') : action;
     return `**Shards engineering · PR ${state}**\n${repo} #${number}\n${root}/pull/${number}`;
+  }
+  if (eventName === 'workflow_run') {
+    const run = event?.workflow_run;
+    const id = run?.id;
+    if (event.action !== 'completed' || run?.conclusion !== 'failure' || !Number.isSafeInteger(id) || id < 1) return null;
+    if (run.head_repository?.full_name !== repo) return null;
+    const workflow = safeDiscordLabel(run.name, 'CI workflow');
+    const branch = safeDiscordLabel(run.head_branch, 'unknown branch');
+    return '**Shards engineering · CI failed**\n' + repo + '\nWorkflow: ' + workflow + '\nBranch: ' + branch + '\n' + root + '/actions/runs/' + id;
   }
   if (eventName === 'release') {
     if (event.action !== 'published' || !Number.isSafeInteger(event.release?.id) || event.release.id < 1) return null;
