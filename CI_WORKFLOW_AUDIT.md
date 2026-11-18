@@ -99,16 +99,32 @@ Release sources:
 
 **Do not merge this PR until the following are checked.**
 
-- Confirm required GitHub branch-protection checks and rulesets.
-  Connected API access returned 403 for branch protection, so the
-  current required-check list is not proven. Removing old workflow
-  files can leave retired required status contexts that block merges.
-- Confirm GitHub's **CodeQL default setup** still runs JavaScript
-  and Actions analysis. GitHub rejects advanced CodeQL SARIF uploads
-  while default setup is enabled. Do not disable default security.
-- Confirm `osv-scanner.yml` and all applicable security workflows
-  actually execute and report results; do not mark them green if they
-  fail due to configuration.
+- **Branch protection (verified):** the repository's `main` branch is
+  *not* protected. `GET /branches/main` reports `protected: false` with
+  required status checks off, `GET /rules/branches/main` is empty and
+  `GET /rulesets` is empty. Removing a workflow therefore cannot break a
+  repository-level required status context. Organization-level rulesets
+  could not be read with the available token (403); if an organization
+  ruleset pins a retired context, that context must be removed there
+  first.
+- **CodeQL default setup (verified):** the repository's dynamic CodeQL
+  analysis ran successfully at this PR's head, covering
+  `javascript-typescript` and `actions`. Removing the conflicting
+  advanced `codeql.yml` does not disable default security analysis.
+- **Known transient failure:** the `Labeler / label`
+  (`pull_request_target`) check fails because the *base* branch still
+  carries `label.yml` while `.github/labeler.yml` does not exist.
+  `pull_request_target` executes the base branch's workflow and reads its
+  configuration from the base ref, so the check cannot be fixed from the
+  pull-request branch and does not indicate a defect in this PR. Removing
+  `label.yml` here stops the check once merged to `main`; do not add
+  placeholder label configuration merely to make the badge green.
+- **OSV migration (verified):** at this PR's head the `scan-pr /
+  osv-scan` job of `osv-scanner.yml` completed successfully with the
+  pinned v2.7.0 reusable workflows, and the scheduled scan is correctly
+  skipped for a pull request. Confirm the scheduled scan still succeeds
+  on `main` after merge; do not mark a scan green if it fails due to
+  configuration.
 - Confirm self-hosted runner ownership before any merge that changes
   runtime allowlisted paths. GitHub `push.paths` will skip
   `deploy-self-hosted.yml` for the CI-only changes in this PR,
